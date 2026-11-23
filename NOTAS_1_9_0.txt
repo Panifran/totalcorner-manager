@@ -1,0 +1,34 @@
+TotalCorner Manager v1.9.0 — A6.3 y A6.4, revision manual de pendientes
+
+CAMBIOS
+- Bloque 01: nueva pestana «A6.3–A6.4. Revisar y enlazar manual».
+- A6.3 consulta ls_match finalizados sin enlace VERIFIED y TC sin enlace VERIFIED (informe en ambos sentidos).
+- Filtros por liga elegida, rango Madrid, margen 1–14.400 minutos (hasta 10 dias) y maximo de propuestas por partido LS.
+- CSV con COMAS, UTF-8 BOM, columnas IDs internos, fechas, equipos, marcadores, evidencias, timezone y avisos.
+- Estados CANDIDATO, SOLO_LS, SOLO_TC; ninguno queda marcado por defecto. Seleccion manual solamente donde hay ambos IDs.
+- Filtro visual TODOS / CANDIDATO / SOLO_LS / SOLO_TC y recuentos en tabla y en resumen.
+- A6.4 simula contra la base actual antes de habilitar «Aplicar». Comprueba que candidatos, datos y huellas no cambiaron.
+- Inserta solamente pares 1:1 seleccionados por usuario; exige misma liga, LS finalizado, rango, margen, y ausencia de cualquier enlace previo. Usa transaccion InnoDB, indices UNIQUE y ROLLBACK ante fallo.
+- Cada aplicacion manual requiere doble confirmacion y etiqueta match_method=MATCH_MANUAL_REVIEW, review_status=VERIFIED; NO cambia ls_match, equipos, cuotas ni propiedad commercial.
+- Registra seleccion en target/totalcorner-manager-logs y auditoria CSV tras COMMIT en reports/totalcorner.
+- Panel general: muestra A6.3/A6.4 y conserva los ticks de A1–A6.2.
+
+INSTALACION
+Cerrar Manager. Descomprimir la ACTUALIZACION sobre C:\Users\Javi\eclipse-workspace\ sobrescribiendo totalcorner-manager.
+En Eclipse: F5 sobre totalcorner-manager, Maven > Update Project, Project > Clean.
+Reiniciar Manager. totalcorner-downloader no cambia. No editar totalcorner-history.properties.
+
+PRUEBA MLS
+1. Abrir Bloque 01 > A6.3–A6.4 con MLS (LS=7, TC=85).
+2. Rango 2015-01-01 a 2027-01-01 (exclusivo), margen 120 minutos, max propuestas 10.
+3. Pulsar «Buscar pendientes A6.3 + CSV». Debe aparecer A63_RESULT y A63_REPORT_OK.
+4. Revisar marcadores/equipos/fechas; marcar SOLO parejas verificadas manualmente (dejar SIN_CANDIDATO sin marcar).
+5. Pulsar «Simular seleccion manual A6.4». Comprobar A64_PLAN N y A64_PREVIEW_OK.
+6. Aplicar solo tras respaldo y revision; debe terminar con A64_APPLIED N y A64_DONE. Genera A64_AUDIT; luego reconsultar A6.3.
+
+NOTAS Y LIMITACIONES
+- Los 4.616 enlaces de A6.2 ya aplicados NO se modifican ni se reinsertan.
+- Ampliar minutos puede introducir falsos positivos; la puntuacion/evidencia es informativa, nunca aprobacion automatica.
+- Algunos partidos quedaran sin pareja aun con 10 dias; no se inventan candidatos.
+- El CSV A6.3 y la simulacion no escriben MySQL; A6.4 APPLY escribe SOLO tc_match_link.
+- Se ha verificado compilacion Java 8, clase runner en modo self-test, interfaz Swing y formato CSV sintético. NO se dispone de acceso al MySQL real de Footiqo para validar datos y escrituras; ejecutar primero CONSULTAR y luego SIMULAR.

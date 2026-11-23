@@ -1,0 +1,18 @@
+# EJEMPLO, no sustituir el fichero real del proyecto Eclipse.
+league.ids=1,14,12,16,25,137,138,2
+league.1.name=England Premier League
+league.1.priority=1
+league.14.name=Spain La Liga
+league.14.priority=2
+league.12.name=Italy Serie A
+league.12.priority=3
+league.16.name=Germany Bundesliga I
+league.16.priority=4
+league.25.name=France Ligue 1
+league.25.priority=5
+league.137.name=UEFA Champions League
+league.137.priority=6
+league.138.name=UEFA Europa League
+league.138.priority=7
+league.2.name=England Championship
+league.2.priority=8

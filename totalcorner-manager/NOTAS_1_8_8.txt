@@ -1,0 +1,16 @@
+TotalCorner Manager v1.8.8 - Correccion de A6.1 (alcance de liga)
+
+Problema: A6.1 leia TODOS los enlaces VERIFIED de tc_team_link sin filtrar
+por liga. Un mapping contradictorio de tc_team_pk=1 fuera de MLS abortaba
+la previsualizacion de MLS (TC=85, LS=7).
+
+Correccion: verifiedTeams() consulta exclusivamente los equipos presentes
+en tc_match de la liga TC seleccionada. Ahora muestra A61_TEAM_MAPPINGS
+y mantiene el bloqueo ante contradicciones DENTRO de la misma liga,
+con los dos IDs LS para diagnosticar el conflicto.
+
+No cambia A5, B1-B7, no modifica MySQL y no consume llamadas API.
+Solo A6.1. No repetir A1-A5. Volver a ejecutar A6.1 y revisar el CSV.
+
+Compilado con javac --release 8. Pruebas locales de la logica de A6.1.
+La consulta real queda pendiente de verificar en el MySQL del usuario.

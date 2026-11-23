@@ -1,0 +1,12 @@
+TotalCorner Manager v1.9.1 - Revision mejorada A6.3/A6.4
+
+1. CANDIDATO solo si local/visitante VERIFIED, marcador igual y 1:1 unico en el margen.
+2. REVISAR_MAPPING cuando algun equipo no esta verificado; REVISAR_MARCADOR cuando los marcadores difieren; AMBIGUO cuando compiten varias propuestas.
+3. Filtro de minutos independiente (100 por defecto) y dos botones: Marcar unicos seguros y Marcar visibles (revision).
+4. Ningun bulk genera enlaces: siempre A6.4 Simular > Aplicar con validaciones y doble confirmacion.
+5. Al elegir masivamente, se excluyen TODOS los casos con parejas competidoras en la seleccion visible, sin elegir la primera arbitrariamente.
+6. Los candidatos ocultos por maxProposals cuentan para detectar ambiguedad.
+7. Los estados se registran en CSV y log; audit A6.4 incluye categoria.
+8. Solo cambia el proyecto totalcorner-manager; conserva y no modifica los datos ya enlazados.
+
+Instalar sobre C:\Users\Javi\eclipse-workspace\ y hacer Project > Clean. Volver a consultar A6.3.

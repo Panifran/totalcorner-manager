@@ -1,0 +1,57 @@
+TotalCorner Manager v1.8.6 — reconciliacion B3/B4 y panel general
+================================================================
+
+Instalacion (Eclipse / Java 8)
+------------------------------
+1. Cerrar Manager y detener todos los procesos B3/B4.
+2. Descomprimir el ZIP de actualizacion en C:\Users\Javi\eclipse-workspace\ sobrescribiendo los archivos.
+3. Actualizar AMBOS proyectos: totalcorner-manager y totalcorner-downloader.
+   Eclipse: F5 > Maven > Update Project > Project > Clean (ambos) > Build Project.
+   IMPORTANTE: en este cambio se modifica tambien HistoricalDownloadRunner.java.
+4. Arrancar TotalCornerManager y comprobar que --version indica 1.8.6.
+5. No modificar .properties ni tablas MySQL. No se necesita rehacer ZIP ni publicar.
+
+B3 — descarga de cuotas
+-----------------------
+* Se unifica la definicion de partido elegible del contador SQL con la del runner:
+  Footiqo finalizado + enlace VERIFIED, TC con kickoff pasado, sin excepcion
+  NOT_FOUND_IN_TC ni enlace VERIFIED contradictorio a un LS no finalizado.
+  NO se requiere marcador finalizado en TotalCorner.
+* La simulacion del runner produce B3_SEASON (TC ID, anyo, elegibles, DONE,
+  pendientes). Manager coteja TODOS los registros por liga con la consulta
+  de control. Un desajuste, salida incompleta o runner antiguo BLOQUEA ejecutar.
+* La recompilacion del runner invalida simulaciones guardadas (firma de clases).
+* Si hay 0 peticiones pero JSON sin confirmar, no se declara terminado B3.
+
+B4 — cobertura
+--------------
+* El control presenta 3 columnas adicionales por liga:
+    Procesables B4: ambos JSON/endpoint correctos y job procesable por Builder.
+    Esperando JSON B3: falta algun JSON valido aunque el resumen siga pendiente.
+    Bloqueados B4: JSON correctos pero el estado/version del job impide
+      seleccionarlo con el filtro normal del Builder.
+* Pendientes = Procesables + Esperando JSON B3 + Bloqueados (validacion SQL).
+* Cuando no hay Procesables, se deshabilita el procesamiento real. Usar
+  'Diagnosticar pendientes + CSV' si falta un requisito.
+* Si Builder selecciona 0 a pesar de que el control ve procesables, se
+  marca como discrepancia y NO se confirma el proceso en el panel general.
+
+Panel general
+-------------
+Se mantiene REVISAR en B3/B4 si hay un desajuste de consultas o version,
+y no se marca una simulacion como ejecucion real. Los checks anteriores
+se conservan salvo que un control nuevo confirme necesidad de revision.
+
+Prueba recomendada tras instalar
+--------------------------------
+En B3: Consultar pendientes > Simular. Deben coincidir por liga.
+En B4: Consultar cobertura. Revisar 3 nuevas columnas por liga.
+Para las ocho ligas ya procesadas, se esperan 0 pendientes en B3/B4
+(si no han entrado nuevos partidos en el intervalo).
+
+No se realizan consultas API ni escrituras MySQL al ejecutar controles
+ni simulaciones. Las operaciones reales mantienen su confirmacion separada.
+
+Validacion realizada: compilacion de Manager con bytecode Java 8, autopruebas
+locales de Manager y validacion de sintaxis de HistoricalDownloadRunner con
+stubs de Jackson. NO se ha ejecutado MySQL del usuario ni API TotalCorner.

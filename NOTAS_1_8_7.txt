@@ -1,0 +1,28 @@
+TotalCorner Manager v1.8.7 - Totales de tablas, nombre B4 y motivos de bloqueo
+
+NOVEDADES
+- B4 se llama «Procesar cuotas descargadas (MySQL)» en pestaña, titulo y dashboard.
+- Todas las tablas de la interfaz tienen una banda de TOTAL justo debajo.
+  Por ejemplo, B3 suma los partidos pendientes y las peticiones pendientes de todas las ligas.
+  Los IDs, fechas, diferencias horarias y otros identificadores NO se suman.
+  En tablas con casillas se indica cuantas estan marcadas; los totales no son filas de datos.
+- Botones de ejecucion deshabilitados: motivo al pasar el raton. B5 muestra
+  tambien dos lineas con el motivo actual de Exporter y Packager.
+- A1-A6.1, B2.2, B3-B4, B5-B7: explicaciones de requisitos previos y estados.
+
+INSTALACION EN ECLIPSE
+1. Cierra TotalCorner Manager.
+2. Extrae totalcorner-manager-1.8.7-actualizacion.zip en C:\Users\Javi\eclipse-workspace\.
+   Sobrescribe los archivos de totalcorner-manager. No es necesario modificar
+   totalcorner-downloader para esta revision.
+3. Eclipse: selecciona totalcorner-manager, F5 y Maven > Update Project;
+   Project > Clean. Ejecuta TotalCornerManager.java normalmente con Java 8.
+4. En B3 > Consultar pendientes comprueba la banda TOTAL al pie de la tabla.
+5. En B5 pasa el cursor sobre Ejecutar Exporter/Packager: el motivo aparecera
+   tambien en pantalla sin necesitar pulsar los botones.
+
+SEGURIDAD
+Esta actualizacion es exclusivamente de interfaz. No cambia SQL, endpoints,
+reglas de seleccion de descargas, nombres de archivos, backups ni publicacion.
+Probado con javac --release 8, pruebas locales y arranque Swing virtual.
+Las consultas sobre MySQL y la API reales siguen sin ejecutarse aqui.

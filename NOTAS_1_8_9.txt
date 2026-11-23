@@ -1,0 +1,28 @@
+TotalCorner Manager v1.8.9 - A6.2. Enlazar partidos seguros de liga nueva
+
+NUEVO: Bloque 01 > A6.2 Aplicar enlaces seguros.
+- Toma el ultimo CSV A6.1 guardado en el panel para la liga y fechas seleccionadas.
+- Solo incluye LISTO_PARA_INSERTAR (unicos 1:1; mismos equipos VERIFIED, fecha y marcador).
+- SIMULAR: regenera de cero A6.1 contra el MySQL actual y compara EXACTAMENTE los pares seguros con el CSV revisado.
+  Comprueba tc_match_link InnoDB e indices UNIQUE independientes en tc_match_pk y ls_match_id.
+- APLICAR: requiere simulacion de ese CSV sin cambios y confirmacion del usuario.
+  En una transaccion realiza INSERT SELECT condicionado por equipos/fechas/FT/zona y ausencia de link previo.
+  Cualquier discrepancia produce ROLLBACK completo; un COMMIT se anuncia explicitamente.
+- Escribe auditoria CSV con comas y BOM en reports/totalcorner; no consume API ni modifica ls_match.
+- No aplica REVISAR_MARCADOR, REVISAR_AMBIGUO, SIN_CANDIDATO_VERIFICADO ni casos fuera del CSV.
+- Para tolerancias >15 minutos, A6.2 automatico se bloquea: se revisara individualmente en A6.3.
+- El panel de control muestra el ultimo lote A6.2 CONFIRMADO, sin dar por enlazados todos los pendientes.
+- Se restauran los filtros A5.2/A6.1 por liga desde el fichero de estado existente, al cambiar de liga o reiniciar.
+
+PASOS: (1) Tras instalar, abrir Bloque 01 y seleccionar liga MLS LS=7 TC=85.
+(2) Comprobar que A6.1 indica CSV confirmado y 4616 seguros, con fechas 2015-01-01..2027-01-01 y tolerancia 5.
+(3) En A6.2 pulsar Simular. Debe salir A62_PLAN con 4616; comprobar que termina A62_PREVIEW_OK.
+(4) Solo despues de revisar el resultado, y con copia de seguridad reciente, pulsar Aplicar y confirmar.
+(5) Esperar A62_APPLIED y A62_DONE y luego ejecutar de nuevo A6.1 para investigar los restantes en A6.3.
+
+SEGURIDAD: No ejecutar otras cargas de links en paralelo. Si aborta, revisar log completo.
+El modulo A6.2 se ha compilado para Java 8 y probado con CSV sintetico; no se ha probado contra MySQL real de Footiqo.
+
+INSTALACION: Cerrar Manager; extraer ZIP de actualizacion a C:\Users\Javi\eclipse-workspace\ sobrescribiendo totalcorner-manager.
+Eclipse: F5, Maven > Update Project, Project > Clean. No modificar totalcorner-history.properties.
+Para verificar: ejecutar TotalCornerManager --version (debe indicar 1.8.9).
