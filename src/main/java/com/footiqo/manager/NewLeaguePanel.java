@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-/** Bloque 01, A1-A7.2: liga nueva, enlaces y descarga historica de cuotas. */
+/** Bloque 01, A1-A7.3: liga nueva, enlaces y descarga historica de cuotas. */
 public final class NewLeaguePanel extends JPanel {
     private static final long serialVersionUID = 1L;
     private static final String VERIFY = "com.footiqo.totalcorner.TotalCornerLeagueIdVerifier";
@@ -173,6 +173,13 @@ public final class NewLeaguePanel extends JPanel {
     private final JLabel a72Status=new JLabel("A7.2: lotes reanudables por competicion TC, de reciente a antigua."),
                          a72Info=new JLabel("No modifica LS ni activa la publicacion comercial.");
     private String a72PreviewSignature="";
+    private final JSpinner a73Limit=new JSpinner(new SpinnerNumberModel(5,1,10,1));
+    private final JButton previewA73=new JButton("1. Simular A7.3 (0 API)"),
+                          executeA73=new JButton("2. Descargar lote sin fecha");
+    private final JLabel a73Status=new JLabel("Solo TC sin fecha, finalizados o enlazados VERIFIED con LS finalizado.");
+    private String a73PreviewSignature="";
+    private String a73Signature(){return key()+"|"+a73Limit.getValue();}
+
     private final javax.swing.table.DefaultTableModel a72ProgressModel=new javax.swing.table.DefaultTableModel(
         new Object[]{"Liga TC", "Temporada (jul-jun)", "Elegibles", "Ejecutados (2 DONE)", "Pendientes"}, 0){
         private static final long serialVersionUID=1L;
@@ -431,6 +438,18 @@ public final class NewLeaguePanel extends JPanel {
         a72.add(new JLabel("Cada ventana abarca 01/07 a 30/06 en UTC (no temporada oficial MLS). Los TC sin fecha se auditan en A7.3."),BorderLayout.SOUTH);
         stages.addTab("A7.2. Historico cuotas por lotes",a72);
 
+        JPanel a73=new JPanel(new BorderLayout(4,4));
+        JPanel a73Head=new JPanel();a73Head.setLayout(new BoxLayout(a73Head,BoxLayout.Y_AXIS));
+        a73Head.add(new JLabel("A7.3 · Recuperar cuotas de partidos TC sin fecha. Misma API, jobs y JSON que A7.2."));
+        JPanel a73Options=new JPanel(new FlowLayout(FlowLayout.LEFT,6,4));
+        a73Options.add(new JLabel("Partidos maximos por lote (1-10):"));a73Options.add(a73Limit);
+        a73Options.add(previewA73);a73Options.add(executeA73);
+        a73Head.add(a73Options);a73Head.add(a73Status);
+        a73.add(a73Head,BorderLayout.NORTH);
+        a73.add(new JLabel("Sin fecha: se conservan cuotas y timestamps; fase PREMATCH/POST_KICKOFF=UNKNOWN. No modifica ls_match."),BorderLayout.CENTER);
+        stages.addTab("A7.3. Cuotas TC sin fecha",a73);
+
+
         JPanel center = new JPanel(new BorderLayout(4, 4));
         stages.setPreferredSize(new Dimension(900, 290));
         // La revision manual necesita visualizar muchas columnas y filas; ampliar solo A6.3/A6.4.
@@ -454,6 +473,9 @@ public final class NewLeaguePanel extends JPanel {
         executeA71.addActionListener(e -> runA71(true));
         previewA72.addActionListener(e -> runA72(false));
         executeA72.addActionListener(e -> runA72(true));
+        previewA73.addActionListener(e -> runA73(false));
+        executeA73.addActionListener(e -> runA73(true));
+        a73Limit.addChangeListener(e -> {a73PreviewSignature="";refresh();});
         a71MatchPk.getDocument().addDocumentListener(new javax.swing.event.DocumentListener(){
             public void insertUpdate(javax.swing.event.DocumentEvent e){refresh();}
             public void removeUpdate(javax.swing.event.DocumentEvent e){refresh();}
@@ -621,6 +643,7 @@ public final class NewLeaguePanel extends JPanel {
     public boolean a3Confirmed(){return a2Confirmed() && !a3When().isEmpty();}
     public String a71When(){return leagueHistory.getProperty("league."+encode(key())+".a71", "");}
     public String a72LastRun(){return leagueHistory.getProperty("league."+encode(key())+".a72.last-run", "");}
+    public String a73LastRun(){return leagueHistory.getProperty("league."+encode(key())+".a73.last-run", "");}
     private String a71Signature(){return key()+"|"+a71MatchPk.getText().trim();}
     private String a72Signature(){return key()+"|"+a72Newest.getValue()+"|"+a72Oldest.getValue()+"|"+
         a72MaxRequests.getValue()+"|"+a72Hours.getValue();}
@@ -951,6 +974,10 @@ public final class NewLeaguePanel extends JPanel {
         ManagerUiSupport.gate(previewA72,a7Ready&&!a71When().isEmpty(),!a7Ready?a71Reason:"Primero confirma la prueba A7.1.");
         ManagerUiSupport.gate(executeA72,previewA72.isEnabled()&&a72PreviewSignature.equals(a72Signature()),
             "Primero simula A7.2 con los mismos limites de anos, peticiones y horas.");
+        ManagerUiSupport.gate(previewA73,a7Ready&&!a71When().isEmpty(),"Primero confirma A7.1 para esta liga.");
+        ManagerUiSupport.gate(executeA73,previewA73.isEnabled()&&a73Signature().equals(a73PreviewSignature),
+            "Primero simula A7.3 con el mismo limite de partidos.");
+        a73Limit.setEnabled(ready);
         a71MatchPk.setEnabled(ready);
         for(JSpinner sp:new JSpinner[]{a72Newest,a72Oldest,a72MaxRequests,a72Hours})sp.setEnabled(ready);
         a71Status.setText(!a71When().isEmpty()?"A7.1 prueba con 2 endpoints confirmada: "+a71When():
@@ -2185,6 +2212,75 @@ public final class NewLeaguePanel extends JPanel {
                         leagueHistory.setProperty(prefix+".a72.last-run",LocalDateTime.now().toString());saveState();
                         note("A7.2: lote ejecutado. No se marca historial completo hasta verificar A7.3.");
                     } else a72PreviewSignature="";
+                }
+                process=null;ownBusy=false;setManagerBusy.accept(false);refresh();
+            }
+        }.execute();
+    }
+
+    /** A7.3: reutiliza el motor de A7.1/A7.2, pero selecciona solo partidos TC sin fecha. */
+    private void runA73(final boolean apply){
+        if(ownBusy||managerBusy.get())return;
+        final String league=key(),scope=a73Signature();
+        final Path dir;
+        final List<String> cmd=new ArrayList<String>();
+        try{
+            if(a71When().isEmpty())throw new IOException("A7.3 requiere prueba A7.1 completada.");
+            if(apply&&!scope.equals(a73PreviewSignature))throw new IOException("Primero simula A7.3 con esta liga y limite.");
+            dir=Paths.get(projectPath.get().trim()).toAbsolutePath().normalize();
+            Path java=Paths.get(java8Path.get().trim()).toAbsolutePath().normalize();
+            TotalCornerManager.verifyJava8(java);
+            if(!Files.isRegularFile(dir.resolve("target/classes/com/footiqo/totalcorner/LeagueOddsBatchDownloader.class")))
+                throw new IOException("Falta LeagueOddsBatchDownloader.class. Compila totalcorner-downloader actualizado.");
+            if(System.getenv("TOTALCORNER_DB_PASSWORD")==null)throw new IOException("Falta TOTALCORNER_DB_PASSWORD.");
+            if(apply&&(System.getenv("TOTALCORNER_API_TOKEN")==null||System.getenv("TOTALCORNER_API_TOKEN").trim().isEmpty()))
+                throw new IOException("Falta TOTALCORNER_API_TOKEN.");
+            Collections.addAll(cmd,java.toString(),"-Dfile.encoding=UTF-8","-cp",TotalCornerManager.buildClasspath(dir),ODDS_A71,
+                "--league="+tcId.getText().trim(),"--limit="+a73Limit.getValue(),"--without-date-only");
+            if(apply){
+                int max=2*((Number)a73Limit.getValue()).intValue();
+                if(JOptionPane.showConfirmDialog(this,"A7.3 · "+name.getText().trim()+" (TC="+tcId.getText().trim()+")\n"
+                    +"Hasta "+max+" peticiones API. Omite DONE validos, conserva JSON y no modifica ls_match.\n"
+                    +"Sin kickoff no se clasifica prematch con certeza. ¿Descargar?",
+                    "A7.3 · Confirmar lote",JOptionPane.YES_NO_OPTION,JOptionPane.WARNING_MESSAGE)!=JOptionPane.YES_OPTION)return;
+                cmd.add("--execute");
+            }
+        }catch(Exception ex){JOptionPane.showMessageDialog(this,ex.getMessage(),"A7.3",JOptionPane.ERROR_MESSAGE);return;}
+        ownBusy=true;cancelled=false;setManagerBusy.accept(true);refresh();
+        note("=== A7.3 "+(apply?"DESCARGA":"SIMULACION")+" | "+league+" ===");
+        new SwingWorker<String,String>(){
+            @Override protected String doInBackground(){
+                Path logFile=dir.resolve("target/totalcorner-manager-logs/A-a73-"+(apply?"execute-":"simulate-")+TS.format(LocalDateTime.now())+".log");
+                int exit=-1;boolean seen=false,error=false;
+                try{
+                    Files.createDirectories(logFile.getParent());publish("Log: "+logFile);
+                    ProcessBuilder pb=new ProcessBuilder(cmd);pb.directory(dir.toFile());pb.redirectErrorStream(true);process=pb.start();
+                    try(BufferedReader reader=new BufferedReader(new InputStreamReader(process.getInputStream(),StandardCharsets.UTF_8));
+                        BufferedWriter writer=Files.newBufferedWriter(logFile,StandardCharsets.UTF_8)){
+                        String line;
+                        while((line=reader.readLine())!=null){
+                            publish(line);writer.write(line);writer.newLine();
+                            if(line.startsWith("A73_AUDIT |"))seen=true;
+                            if(line.startsWith("ERROR")||line.contains("job RETRY")||line.contains("HTTP 429"))error=true;
+                        }
+                    }
+                    exit=process.waitFor();
+                }catch(Exception ex){return "ERROR A7.3: "+ex.getClass().getSimpleName()+": "+ex.getMessage();}
+                if(cancelled)return "ERROR A7.3: interrumpido; los trabajos DONE permanecen.";
+                if(exit!=0||error||!seen)return "ERROR A7.3: revisar log, codigo="+exit;
+                return apply?"A7.3_LOTE_PROCESADO":"A7.3_SIMULACION_OK";
+            }
+            @Override protected void process(List<String> messages){for(String msg:messages)note(msg);}
+            @Override protected void done(){
+                String result;try{result=get();}catch(Exception ex){result="ERROR A7.3: "+ex.getMessage();}
+                note("== "+result+" ==");
+                if(league.equals(key())){
+                    if("A7.3_SIMULACION_OK".equals(result))a73PreviewSignature=scope;
+                    else if("A7.3_LOTE_PROCESADO".equals(result)){
+                        a73PreviewSignature="";
+                        leagueHistory.setProperty("league."+encode(key())+".a73.last-run",LocalDateTime.now().toString());
+                        saveState();
+                    }else a73PreviewSignature="";
                 }
                 process=null;ownBusy=false;setManagerBusy.accept(false);refresh();
             }

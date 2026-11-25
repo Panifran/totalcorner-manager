@@ -151,7 +151,9 @@ public final class WorkflowDashboardPanel extends JPanel {
         row(aModel,lastA72.isEmpty()?"○ Pendiente":"! Auditar","A7.2 · Descargar historico",
             lastA72.isEmpty()?"Descargar por lotes tras A7.1; trabajos reanudables":
                 "Ultimo lote: "+lastA72+". Falta auditoria A7.3 antes de dar el historico por completo");
-        row(aModel,"· Futuro","A7.3 · Comprobar JSON","Auditar jobs, JSON validos, cobertura y partidos sin fecha");
+        row(aModel,newLeague.a73LastRun().isEmpty()?"○ Pendiente":"! Auditar","A7.3 · Cuotas sin fecha",
+            newLeague.a73LastRun().isEmpty()?"Simular y descargar trabajos pendientes de partidos TC sin kickoff":
+                "Ultimo lote: "+newLeague.a73LastRun()+". Verificar pendientes y JSON antes de cerrar etapa");
         row(aModel,"· Futuro","A8 · Auditar cobertura","Comprobar datos y recalcular tc_cov_*");
         row(aModel,"· Futuro","A9 · Exportar datasets","Generacion comercial y revision antes de publicar");
         progressRow("B1.1","B1.1 · Consultar estado","Consultar al inicio y de nuevo tras B1.2");
@@ -202,9 +204,10 @@ public final class WorkflowDashboardPanel extends JPanel {
                 newLeague.a61Checked()?"Bloque 01: siguiente A6.2 · Simular y aplicar candidatos seguros.":
                 "Bloque 01: siguiente A6.1 · Previsualizar partidos y revisar CSV.");
             if(newLeague.a62Applied()){
-                nextAStage=newLeague.a71When().isEmpty()?10:11;
+                nextAStage=newLeague.a71When().isEmpty()?10:newLeague.a72LastRun().isEmpty()?11:12;
                 summary.setText(newLeague.a71When().isEmpty()?"Bloque 01: siguiente A7.1 · Probar cuotas de un partido.":
-                    "Bloque 01: siguiente A7.2 · Descargar cuotas historicas por lotes.");
+                    newLeague.a72LastRun().isEmpty()?"Bloque 01: siguiente A7.2 · Descargar cuotas historicas por lotes.":
+                        "Bloque 01: siguiente A7.3 · Recuperar cuotas TC sin fecha y auditar.");
             }
             next.setEnabled(true);
         }
@@ -212,9 +215,9 @@ public final class WorkflowDashboardPanel extends JPanel {
     private void openSelection(){
         int a=aTable.getSelectedRow(),b=bTable.getSelectedRow();
         if(a>=0){
-            if(a<=12){navigate.accept(10);
+            if(a<=13){navigate.accept(10);
                 int[] stageIndex={0,1,2,3,4,5,6,7,8,9,9,10,11};
-                newLeague.selectStage(stageIndex[Math.max(0,Math.min(a,12))]);}
+                newLeague.selectStage(a==13?12:stageIndex[Math.max(0,Math.min(a,12))]);}
             else JOptionPane.showMessageDialog(this,"Esta etapa del Bloque 01 todavia no esta integrada en el gestor.","Siguiente modulo",JOptionPane.INFORMATION_MESSAGE);
         } else if(b>=0){navigate.accept(b);}else JOptionPane.showMessageDialog(this,"Selecciona un proceso en una de las tablas.");
     }
