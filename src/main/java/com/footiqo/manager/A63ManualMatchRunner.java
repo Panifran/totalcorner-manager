@@ -22,7 +22,7 @@ public final class A63ManualMatchRunner {
     static final class Row {
         String kind,quality="",hint="",fingerprint="";Match ls,tc;long seconds;boolean homeVerified,awayVerified;
         String[] cells(){return new String[]{kind,ls==null?"":Long.toString(ls.id),tc==null?"":Long.toString(tc.id),tc==null?"":Long.toString(tc.api),
-            ls==null?"":ls.date,tc==null?"":tc.date,ls==null||tc==null?"":Double.toString(seconds/60.0),ls==null?"":ls.season,
+            ls==null?"":ls.date,tc==null?"":tc.date,ls==null||tc==null||tc.utc.isEmpty()?"":Double.toString(seconds/60.0),ls==null?"":ls.season,
             ls==null?"":ls.homeName,ls==null?"":ls.awayName,ls==null?"":ls.score,tc==null?"":tc.homeName,tc==null?"":tc.awayName,tc==null?"":tc.score,
             quality,homeVerified?"SI":"NO",awayVerified?"SI":"NO",tc==null?"":tc.zone,tc==null?"":tc.state,hint,fingerprint};}
         String key(){return ls.id+":"+tc.id;}
@@ -110,11 +110,18 @@ public final class A63ManualMatchRunner {
     private static final Comparator<Row> PAIR_ORDER=new Comparator<Row>(){public int compare(Row a,Row b){
         int evA=(a.homeVerified?1:0)+(a.awayVerified?1:0),evB=(b.homeVerified?1:0)+(b.awayVerified?1:0);
         if(evA!=evB)return evB-evA;
+        // Un TC sin fecha nunca desplaza por proximidad ficticia a uno fechado.
+        if(a.tc.utc.isEmpty()!=b.tc.utc.isEmpty())return a.tc.utc.isEmpty()?1:-1;
         boolean sA=a.ls.hasScore&&a.tc.hasScore&&a.ls.hg==a.tc.hg&&a.ls.ag==a.tc.ag;
         boolean sB=b.ls.hasScore&&b.tc.hasScore&&b.ls.hg==b.tc.hg&&b.ls.ag==b.tc.ag;
         if(sA!=sB)return sA?-1:1;int d=Long.compare(Math.abs(a.seconds),Math.abs(b.seconds));if(d!=0)return d;return Long.compare(a.tc.id,b.tc.id);
     }};
-    private static String classify(boolean homeVerified,boolean awayVerified,boolean sameScore,int lsCandidates,int tcCandidates){
+    private static boolean nullDateEligible(Match ls,Match tc,boolean homeVerified,boolean awayVerified){
+        return tc.utc.isEmpty() && homeVerified && awayVerified && ls.hasScore && tc.hasScore
+            && ls.hg==tc.hg && ls.ag==tc.ag;
+    }
+    private static String classify(boolean missingDate,boolean homeVerified,boolean awayVerified,boolean sameScore,int lsCandidates,int tcCandidates){
+        if(missingDate)return "REVISAR_TC_SIN_FECHA";
         if(!homeVerified||!awayVerified)return "REVISAR_MAPPING";
         if(!sameScore)return "REVISAR_MARCADOR";
         if(lsCandidates!=1||tcCandidates!=1)return "AMBIGUO";
@@ -130,18 +137,28 @@ public final class A63ManualMatchRunner {
         // Cada pareja con indicios cuenta, incluso si tiene equipos no VERIFED.
         Map<Long,Integer> countLs=new HashMap<Long,Integer>(),countTc=new HashMap<Long,Integer>();
         for(Match a:ls){List<Row> found=new ArrayList<Row>();LocalDateTime utcA=dt(a.utc);
-            if(!blockedLs.contains(a.id)&&utcA!=null)for(Match b:tc){if(blockedTc.contains(b.id))continue;LocalDateTime utcB=dt(b.utc);if(utcB==null)continue;
-                long seconds=Duration.between(utcA,utcB).getSeconds();if(Math.abs(seconds)>tolerance*60L)continue;
+            if(!blockedLs.contains(a.id)&&utcA!=null)for(Match b:tc){
+                if(blockedTc.contains(b.id))continue;
+                LocalDateTime utcB=dt(b.utc);
                 boolean home=Objects.equals(teams.get(b.home),a.home),away=Objects.equals(teams.get(b.away),a.away);
-                boolean nh=sameName(a.homeName,b.homeName),na=sameName(a.awayName,b.awayName);
                 boolean score=a.hasScore&&b.hasScore&&a.hg==b.hg&&a.ag==b.ag;
-                // Un indicio no es prueba: se muestran incluso candidatos de calidad baja para revision humana.
-                if(!(home||away||nh||na||(score&&Math.abs(seconds)<=3600)))continue;
-                Row r=new Row();r.kind="REVISAR_MAPPING";r.ls=a;r.tc=b;r.seconds=seconds;r.homeVerified=home;r.awayVerified=away;
-                r.quality=home&&away?(score?"ALTA: EQUIPOS + MARCADOR":"REVISAR: EQUIPOS, MARCADOR DISTINTO"):
+                boolean missingDate=utcB==null;
+                long seconds=missingDate?0:Duration.between(utcA,utcB).getSeconds();
+                if(missingDate){
+                    // Sin referencia temporal SOLO se proponen equipos VERIFIED y marcador FT identico.
+                    // Dos partidos con los mismos equipos/FT pueden pertenecer a temporadas distintas.
+                    if(!nullDateEligible(a,b,home,away))continue;
+                }else if(Math.abs(seconds)>tolerance*60L)continue;
+                boolean nh=sameName(a.homeName,b.homeName),na=sameName(a.awayName,b.awayName);
+                if(!missingDate && !(home||away||nh||na||(score&&Math.abs(seconds)<=3600)))continue;
+                Row r=new Row();r.kind=missingDate?"REVISAR_TC_SIN_FECHA":"REVISAR_MAPPING";
+                r.ls=a;r.tc=b;r.seconds=seconds;r.homeVerified=home;r.awayVerified=away;
+                r.quality=missingDate?"REVISION MANUAL: 2 EQUIPOS VERIFIED + FT IGUAL, FECHA TC AUSENTE":
+                    home&&away?(score?"ALTA: EQUIPOS + MARCADOR":"REVISAR: EQUIPOS, MARCADOR DISTINTO"):
                     (home||away)?(score?"MEDIA: EQUIPO + MARCADOR":"REVISAR: UN EQUIPO"):
                     nh&&na&&score?"MEDIA: NOMBRES + MARCADOR":score?"BAJA: MARCADOR + FECHA":"REVISAR: NOMBRES";
-                r.hint=(!"PROFILE_VERIFIED".equals(b.zone)?"ZONA_TC_NO_VERIFICADA | ":"")+
+                r.hint=missingDate?"SIN_FECHA_TC | SIN_COMPROBACION_HORARIA | CONFIRMAR_TEMPORADA_Y_FASE | ":
+                    (!"PROFILE_VERIFIED".equals(b.zone)?"ZONA_TC_NO_VERIFICADA | ":"")+
                     (!a.hasScore?"SIN_MARCADOR_LS | ":!b.hasScore?"SIN_MARCADOR_TC | ":!score?"MARCADOR_DISTINTO | ":"")+
                     (home&&away?"":"EQUIPOS_NO_VERIFICADOS_2_DE_2 | ");
                 found.add(r);
@@ -159,7 +176,10 @@ public final class A63ManualMatchRunner {
         // posible en cada sentido, contando incluso las ocultas por maxProposals.
         for(Row r:out.pairs.values()){
             boolean score=r.ls.hasScore&&r.tc.hasScore&&r.ls.hg==r.tc.hg&&r.ls.ag==r.tc.ag;
-            r.kind=classify(r.homeVerified,r.awayVerified,score,countLs.get(r.ls.id),countTc.get(r.tc.id));
+            boolean withoutDate=r.tc.utc.isEmpty();
+            r.kind=classify(withoutDate,r.homeVerified,r.awayVerified,score,countLs.get(r.ls.id),countTc.get(r.tc.id));
+            if(withoutDate && (countLs.get(r.ls.id)>1||countTc.get(r.tc.id)>1))
+                r.hint+="ALTERNATIVAS_LS="+countLs.get(r.ls.id)+" TC="+countTc.get(r.tc.id)+" | ";
             r.fingerprint=fingerprint(r);
         }
         for(Match b:tc)if(!tcWithPair.contains(b.id)){
@@ -227,8 +247,15 @@ public final class A63ManualMatchRunner {
         String verify="SELECT m.id FROM ls_match m JOIN ls_league_season s ON s.id=m.lsLeague_season_id "
           +"JOIN tc_match t ON t.id=? JOIN tc_league l ON l.id=t.league_id "
           +"WHERE m.id=? AND s.league_id=? AND l.tc_league_id=? AND m.pendingFinalResult=b'0' "
-          +"AND m.matchDate>=? AND m.matchDate<? AND t.kickoff_utc IS NOT NULL "
-          +"AND ABS(TIMESTAMPDIFF(SECOND,CONVERT_TZ(m.matchDate,'Europe/Madrid','+00:00'),t.kickoff_utc))<=? "
+          +"AND m.matchDate>=? AND m.matchDate<? "
+          +"AND ((t.kickoff_utc IS NOT NULL AND "
+          +"ABS(TIMESTAMPDIFF(SECOND,CONVERT_TZ(m.matchDate,'Europe/Madrid','+00:00'),t.kickoff_utc))<=?) "
+          +"OR (t.kickoff_utc IS NULL AND m.ftHomeTeamGoals IS NOT NULL AND m.ftAwayTeamGoals IS NOT NULL "
+          +"AND t.home_goals=m.ftHomeTeamGoals AND t.away_goals=m.ftAwayTeamGoals "
+          +"AND EXISTS(SELECT 1 FROM tc_team_link th WHERE th.tc_team_pk=t.home_team_id "
+          +"AND th.ls_team_id=m.lsHomeTeam_id AND th.review_status='VERIFIED') "
+          +"AND EXISTS(SELECT 1 FROM tc_team_link ta WHERE ta.tc_team_pk=t.away_team_id "
+          +"AND ta.ls_team_id=m.lsAwayTeam_id AND ta.review_status='VERIFIED'))) "
           +"AND NOT EXISTS(SELECT 1 FROM tc_match_link x WHERE x.ls_match_id=m.id OR x.tc_match_pk=t.id) FOR UPDATE";
         try(PreparedStatement check=db.prepareStatement(verify);
             PreparedStatement insert=db.prepareStatement("INSERT INTO tc_match_link(tc_match_pk,ls_match_id,match_method,confidence,review_status,checked_at) VALUES(?,?,'MATCH_MANUAL_REVIEW',NULL,'VERIFIED',UTC_TIMESTAMP(3))")){
@@ -253,12 +280,19 @@ public final class A63ManualMatchRunner {
             Path test=Files.createTempFile("a63-selftest-",".csv");try(Writer w=Files.newBufferedWriter(test,StandardCharsets.UTF_8)){csv(w,HEADER);csv(w,r.cells());}
             if(!new String(Files.readAllBytes(test),StandardCharsets.UTF_8).contains("\"a, \"\"b\"\"\""))throw new AssertionError("CSV RFC4180");Files.delete(test);
             if(!sameName("CF Montréal","cf montreal"))throw new AssertionError("Alias normalizado");
-            if(!"REVISAR_MAPPING".equals(classify(false,true,true,1,1)))throw new AssertionError("No VERIFIED");
-            if(!"REVISAR_MARCADOR".equals(classify(true,true,false,1,1)))throw new AssertionError("Marcador");
-            if(!"AMBIGUO".equals(classify(true,true,true,1,2)))throw new AssertionError("Duplicado TC");
-            if(!"AMBIGUO".equals(classify(true,true,true,2,1)))throw new AssertionError("Duplicado LS");
-            if(!"CANDIDATO".equals(classify(true,true,true,1,1)))throw new AssertionError("Unico verificado");
-            System.out.println("A63_SELF_TEST_OK | CSV UTF-8 RFC4180, nombres, evidencia y huella Java8");return;}
+            if(!"REVISAR_MAPPING".equals(classify(false,false,true,true,1,1)))throw new AssertionError("No VERIFIED");
+            if(!"REVISAR_MARCADOR".equals(classify(false,true,true,false,1,1)))throw new AssertionError("Marcador");
+            if(!"AMBIGUO".equals(classify(false,true,true,true,1,2)))throw new AssertionError("Duplicado TC");
+            if(!"AMBIGUO".equals(classify(false,true,true,true,2,1)))throw new AssertionError("Duplicado LS");
+            if(!"CANDIDATO".equals(classify(false,true,true,true,1,1)))throw new AssertionError("Unico verificado");
+            if(!"REVISAR_TC_SIN_FECHA".equals(classify(true,true,true,true,1,1)))throw new AssertionError("TC sin fecha");
+            Match ls=new Match(),tc=new Match();ls.hasScore=tc.hasScore=true;ls.hg=tc.hg=2;ls.ag=tc.ag=1;
+            if(!nullDateEligible(ls,tc,true,true)||nullDateEligible(ls,tc,false,true))throw new AssertionError("Sin fecha equipos");
+            tc.ag=0;if(nullDateEligible(ls,tc,true,true))throw new AssertionError("Sin fecha marcador");
+            tc.ag=1;tc.utc="2026-01-01 00:00:00";if(nullDateEligible(ls,tc,true,true))throw new AssertionError("Sin fecha solo");
+            Row undated=new Row();undated.ls=ls;undated.tc=new Match();undated.kind="REVISAR_TC_SIN_FECHA";
+            if(!undated.cells()[6].isEmpty())throw new AssertionError("Delta en blanco cuando falta fecha TC");
+            System.out.println("A63_SELF_TEST_OK | CSV UTF-8 RFC4180, nombres, evidencias y TC sin fecha Java8");return;}
         if(args.length!=11)throw new IllegalArgumentException("Uso: --mode=REPORT|PREVIEW|APPLY --ls-league-id=N --tc-league-id=N --from=YYYY-MM-DD --to-exclusive=YYYY-MM-DD --tolerance-minutes=N --max-proposals=N --output=path|- --selection=path|- --expected=N --audit=path|-");
         String mode=param(args[0],"--mode=");if(!Arrays.asList("REPORT","PREVIEW","APPLY").contains(mode))throw new IllegalArgumentException("Modo invalido");
         long ls=number(param(args[1],"--ls-league-id="),1,10000000);String tc=Long.toString(number(param(args[2],"--tc-league-id="),1,10000000));
@@ -289,7 +323,9 @@ public final class A63ManualMatchRunner {
             if("REPORT".equals(mode)){
                 outputCsv(path,report);System.out.println("A63_CSV\t"+path);System.out.println("A63_REPORT_OK | Solo lectura. Revisar candidatos y marcar pares individuales.");return;}
             validateSelection(selection,report);schema(db);
+            int undatedCount=0;for(String key:selection.keySet())if(report.pairs.get(key).tc.utc.isEmpty())undatedCount++;
             System.out.println("A64_PLAN\t"+expected+"\t"+tolerance+"\t0_CONFLICTOS");
+            System.out.println("A64_TC_SIN_FECHA\t"+undatedCount+"\tREVISION_MANUAL_OBLIGATORIA");
             if("PREVIEW".equals(mode)){System.out.println("A64_PREVIEW_OK | Sin escrituras. Revision manual obligatoria.");return;}
             Path audit=Paths.get(auditArg).toAbsolutePath().normalize();
             if(Files.exists(audit))throw new IOException("Auditoria ya existe; no sobrescribir: "+audit);
@@ -299,7 +335,7 @@ public final class A63ManualMatchRunner {
                 try(Writer w=new BufferedWriter(new OutputStreamWriter(Files.newOutputStream(audit,StandardOpenOption.CREATE_NEW),StandardCharsets.UTF_8))){
                     w.write('\uFEFF');csv(w,new String[]{"ls_match_id","tc_match_pk","match_method","review_status","tipo_a63","fecha_ls","fecha_tc","diferencia_minutos","marcador_ls","marcador_tc","evidencia","avisos","huella"});
                     for(String key:selection.keySet()){Row x=report.pairs.get(key);csv(w,new String[]{Long.toString(x.ls.id),Long.toString(x.tc.id),"MATCH_MANUAL_REVIEW","VERIFIED",x.kind,
-                         x.ls.date,x.tc.date,Double.toString(x.seconds/60.0),x.ls.score,x.tc.score,x.quality,x.hint,x.fingerprint});}
+                         x.ls.date,x.tc.date,x.tc.utc.isEmpty()?"":Double.toString(x.seconds/60.0),x.ls.score,x.tc.score,x.quality,x.hint,x.fingerprint});}
                 }
                 System.out.println("A64_AUDIT\t"+audit);
             }catch(Exception ex){System.out.println("A64_AUDIT_WARNING: COMMIT realizado pero CSV no disponible: "+clean(ex.getMessage()));}

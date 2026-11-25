@@ -1,0 +1,24 @@
+TOTALCORNER MANAGER 1.9.11 - Ajuste B1.2 (25-11-2026)
+
+Archivo modificado: src/main/java/com/footiqo/manager/TotalCornerManager.java
+
+CAMBIOS
+- B1.2 incluye la casilla 'Ciclo diario automatico', marcada por defecto.
+- Al comprobar o ejecutar B1.2, el ID de ciclo toma la fecha de Madrid.
+- Un trabajo completado ese mismo dia se mantiene DONE. No fuerza solicitudes duplicadas.
+- Para repetir una segunda vez durante el mismo dia, desmarca la casilla e introduce AAAA-MM-DD-r2.
+- Se guarda la preferencia 'autoCycle' en .totalcorner-manager.properties.
+- Sin cambios en B2, B3, B4, SQL ni estructura del proyecto.
+
+INSTALACION EN ECLIPSE
+1. Guarda copia de la clase actual TotalCornerManager.java.
+2. Sustituye el archivo homonimo del proyecto totalcorner-manager con el del ZIP.
+3. Maven > Update Project y Project > Clean, despues Build.
+4. Abre B1.2 y verifica la casilla 'Ciclo diario automatico'.
+
+IMPORTANTE
+- El menu B1.2 usa LeagueScheduleRefreshRunner, NO LeagueScheduleBackfill.
+- El descargador LeagueScheduleRefreshRunner no estaba incluido en este ZIP. Por tanto esta entrega NO modifica su logica, las paginas elegidas ni los criterios del refresh.
+- El cambio es de interfaz y gestion del ciclo solamente.
+- La clase ha compilado con javac --release 8; no se ha ejecutado contra MySQL ni la API.
+- Para actualizar todas las paginas afectadas, elige un maximo de paginas suficiente: B1.2 no usa aun una ventana automatica exacta de 7 dias atras/60 dias adelante.

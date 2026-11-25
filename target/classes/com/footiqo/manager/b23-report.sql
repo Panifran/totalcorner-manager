@@ -30,9 +30,9 @@ SELECT @desde_madrid AS desde_madrid, @hasta_madrid_exclusiva AS hasta_exclusiva
 -- Al incorporar una liga comercial nueva, anadir UNA fila aqui.
 DROP TEMPORARY TABLE IF EXISTS tmp_b23_ligas;
 CREATE TEMPORARY TABLE tmp_b23_ligas (
-    ls_league_id INT NOT NULL PRIMARY KEY,
+    ls_league_id INT NOT NULL,
     tc_id VARCHAR(80) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-    UNIQUE KEY uq_tc_id (tc_id)
+    PRIMARY KEY (ls_league_id, tc_id), UNIQUE KEY uq_tc_id (tc_id)
 );
 INSERT INTO tmp_b23_ligas (ls_league_id, tc_id) VALUES
     (2,'1'),    -- Premier League
@@ -61,7 +61,8 @@ SELECT m.id AS ls_match_id, c.name AS country, ll.name AS liga,
        ex.notes AS notas_excepcion
 FROM ls_match m
 JOIN ls_league_season lls ON lls.id=m.lsLeague_season_id
-JOIN tmp_b23_ligas g ON g.ls_league_id=lls.league_id
+JOIN (SELECT ls_league_id, MIN(tc_id) AS tc_id FROM tmp_b23_ligas GROUP BY ls_league_id) g
+  ON g.ls_league_id=lls.league_id
 JOIN ls_league ll ON ll.id=lls.league_id
 LEFT JOIN ls_country c ON c.id=ll.country_id
 JOIN ls_season ss ON ss.id=lls.season_id
@@ -189,7 +190,8 @@ SELECT g.ls_league_id, g.tc_id AS tc_league_id_api, co.name AS country, ll.name 
        COALESCE(c.n,0) AS parejas_candidatas,
        COALESCE(sl.n,0) AS ls_sin_candidato,
        COALESCE(st.n,0) AS tc_sin_candidato
-FROM tmp_b23_ligas g
+FROM (SELECT ls_league_id,GROUP_CONCAT(tc_id ORDER BY CAST(tc_id AS UNSIGNED) SEPARATOR '+') AS tc_id
+      FROM tmp_b23_ligas GROUP BY ls_league_id) g
 JOIN ls_league ll ON ll.id=g.ls_league_id
 LEFT JOIN ls_country co ON co.id=ll.country_id
 LEFT JOIN (

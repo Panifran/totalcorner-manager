@@ -1,0 +1,27 @@
+TotalCorner Manager v1.9.11 — Contadores de A7.2 para UNA sola competición TotalCorner
+
+MEJORAS
+- A7.2 muestra exclusivamente la competicion TC seleccionada arriba (por ejemplo TC=596, MLS Play-offs).
+- Una fila por ventana anual JULIO a JUNIO en UTC (el runner existente usa estas ventanas; no son temporadas oficiales de MLS).
+- Columnas: liga TC, ventana, elegibles, ejecutados (los dos jobs DONE), pendientes.
+- Fila de total de la competicion seleccionada.
+- Boton 1 (simulacion): consulta MySQL y actualiza la tabla sin API ni escrituras.
+- Boton 2 (descargar): tras finalizar cada lote, repite automaticamente consulta sin API y refresca los contadores.
+- Cambiar de liga TC o ventana anual borra los contadores anteriores para evitar mostrar cifras de otra selección.
+- El presupuesto de peticiones (ej. 500) cuenta llamadas API, NO partidos.
+
+LIMITACIONES
+- Ejecutados significa AMBOS jobs DONE; la auditoria posterior A7.3 verificara JSON y cobertura.
+- Los partidos TC sin kickoff_utc no entran en las ventanas anuales del runner; se auditaran aparte en A7.3.
+- No cambia consultas ni operaciones del descargador. No publica MLS ni altera ls_match.
+
+INSTALACION
+1. Cerrar Manager. Extraer ZIP en C:\Users\Javi\eclipse-workspace\.
+2. Eclipse: Refresh > Maven Update Project > Project Clean (solo totalcorner-manager).
+3. Ejecutar Manager v1.9.11. En A7.2 elegir TC=85 o TC=596 y pulsar 1 para ver solo esa competicion.
+
+PRUEBAS
+- Compilacion javac --release 8; bytecode 52.
+- --self-test-a72: recuento, dos ventanas y totales.
+- Regresion --self-test-a1/a4/a51/a52/a53/a61/a62/progress/b7.
+- No se ha ejecutado contra la MySQL real ni la API.

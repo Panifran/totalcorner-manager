@@ -1,0 +1,32 @@
+TotalCorner Manager v1.9.9 - Diagnostico B1.1 sin escrituras
+
+Motivo: v1.8.9 devuelve 8 filas, pero v1.9.8 sigue mostrando 0 en el equipo real.
+La consulta SQL BASELINE es identica en las dos versiones. No se ha probado el origen del fallo.
+
+Cambios:
+- Identificacion visible de version v1.9.9 en la barra de la aplicacion.
+- Cada consulta B1.1 guarda un log legible en el proyecto totalcorner-downloader:
+  target/totalcorner-manager-logs/B-b11-AAAAMMDD-HHMMSS-SSS.log
+- El log incluye B11_UI_VERSION (clase del Manager que se ejecuta), B11_TRACE
+  (clase real del proceso hijo, modo BASELINE_189 o MULTI_1N), B11_DATABASE
+  (nombre de BD), B11_DB_LEAGUE (filas de tc_league e indicador enabled),
+  B11_DB_LEAGUES_FOUND, B11_ROW y B11_DONE o B11_ERROR.
+- Los resultados no deben interpretarse como correctos si faltan filas.
+- No se modifican tablas, marcadores, cuotas, trabajos de descarga ni publicacion.
+- El log no contiene passwords, tokens ni cadenas completas de conexion.
+
+COMPROBACION:
+1. Cierra Manager y sustituye los archivos del proyecto totalcorner-manager.
+2. Eclipse: Maven > Update Project, Project > Clean para totalcorner-manager.
+3. Comprueba que el titulo incluye v1.9.9.
+4. Bloque 2 > B1.1 > Consultar estado B1.1.
+5. Envia SOLO el archivo B-b11-...log recien generado.
+
+Interpretacion:
+- Si B11_TRACE no aparece: esta ejecutandose una clase antigua o el proceso
+  no alcanza a iniciar.
+- Si B11_DB_LEAGUES_FOUND no encuentra las ocho: conexion, ids o datos tc_league.
+- Si aparecen ocho B11_ROW pero no en GUI: fallo de presentacion o recarga.
+- Si aparece B11_ERROR: ese es el error SQL o de configuracion real.
+
+No reejecutar B1.2 ni editar MySQL para este diagnostico.

@@ -1,0 +1,12 @@
+TotalCorner Manager 1.9.6 – Bloque 01 A7.1/A7.2
+
+- A7.1 simular y descargar una prueba de un partido TC (dos endpoints).
+- A7.2 descargar cuotas historicas por lotes usando las configuraciones propias de TC=85 y TC=596.
+- Seguimiento en el panel general por competicion TC.
+- El procesamiento de cuotas en MySQL es del descargador existente; A8 procesara cobertura.
+- A7.3 de auditoria completa pendiente de integrar.
+- Las ventanas anuales no incluyen TC sin fecha; requiere tratamiento separado.
+- No modifica las tablas ls_ ni las ligas comerciales.
+
+Instalacion: actualiza solo totalcorner-manager y compila en Eclipse (Java 8).
+Variables necesarias: TOTALCORNER_DB_PASSWORD y, al ejecutar, TOTALCORNER_API_TOKEN.

@@ -11,9 +11,6 @@ import java.util.*;
 
 /** B2.3: informe de solo lectura de tablas permanentes, con temporales en sesion MySQL. */
 public final class B23ReportRunner {
-    private static final Map<String,Integer> MAP = new LinkedHashMap<String,Integer>();
-    static { MAP.put("1",2); MAP.put("14",1); MAP.put("12",3); MAP.put("16",4);
-        MAP.put("25",5); MAP.put("137",18); MAP.put("138",28); MAP.put("2",6); }
     private B23ReportRunner() {}
     private static String sanitize(String s) {return s==null?"":s.replace('\t',' ').replace('\r',' ').replace('\n',' ');}
     private static String env(String n,String d) { String x=System.getenv(n);return x==null||x.trim().isEmpty()?d:x; }
@@ -21,7 +18,7 @@ public final class B23ReportRunner {
     public static void main(String[] args) {
         try {
             if (args.length==1 && "--self-test".equals(args[0])) {
-                if (!MAP.containsKey("137") || !isAllowed("DELETE p FROM tmp_b23_pares p WHERE 1=0")
+                if (!LeagueMappingRegistry.load().containsKey("137") || !isAllowed("DELETE p FROM tmp_b23_pares p WHERE 1=0")
                     || isAllowed("DELETE FROM ls_match") || isAllowed("UPDATE tc_match SET id=1"))
                     throw new IllegalStateException("Restricciones SQL incorrectas");
                 if (!loadScript().contains("SELECT z.tipo_fila")) throw new IllegalStateException("SQL B2.3 ausente");
@@ -60,7 +57,7 @@ public final class B23ReportRunner {
                     if(!isAllowed(q)) throw new IllegalStateException("Instruccion SQL no permitida en B2.3");
                     if(q.startsWith("INSERT INTO tmp_b23_ligas")) {
                         try(PreparedStatement ps=db.prepareStatement("INSERT INTO tmp_b23_ligas (ls_league_id,tc_id) VALUES (?,?)")) {
-                            for (String id:ids) {ps.setInt(1,MAP.get(id));ps.setString(2,id);ps.addBatch();}
+                            for (String id:ids) {ps.setInt(1,Integer.parseInt(LeagueMappingRegistry.load().get(id).lsId));ps.setString(2,id);ps.addBatch();}
                             ps.executeBatch();
                         }
                         continue;
@@ -83,7 +80,9 @@ public final class B23ReportRunner {
                         }
                     }
                 }
-                if(summaries!=ids.size()) throw new IllegalStateException("Resultado incompleto: "+summaries+" ligas de "+ids.size());
+                Set<String> lsLeagues=new HashSet<String>();
+                for(String id:ids)lsLeagues.add(LeagueMappingRegistry.load().get(id).lsId);
+                if(summaries!=lsLeagues.size()) throw new IllegalStateException("Resultado incompleto: "+summaries+" ligas LS de "+lsLeagues.size());
                 System.out.println("B23_DONE\t"+summaries+"\t"+details+"\t"+period+"\t"+margin);
             }
         } catch(Throwable e) {

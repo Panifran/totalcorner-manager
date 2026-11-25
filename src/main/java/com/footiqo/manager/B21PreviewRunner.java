@@ -23,8 +23,6 @@ import java.util.Set;
  * no autorizan por si solos a ejecutar B2.2: este es un control de diagnostico.
  */
 public final class B21PreviewRunner {
-    private static final Set<String> KNOWN_IDS = Collections.unmodifiableSet(new HashSet<String>(
-            Arrays.asList("1", "14", "12", "16", "25", "137", "138", "2")));
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.ROOT);
 
     private B21PreviewRunner() {}
@@ -154,7 +152,7 @@ public final class B21PreviewRunner {
         List<String> ids = new ArrayList<String>();
         for (String raw : args[0].substring("--league-ids=".length()).split(",", -1)) {
             String id = raw.trim();
-            if (!KNOWN_IDS.contains(id))
+            if ((!LeagueMappingRegistry.load().containsKey(id) || !LeagueMappingRegistry.load().get(id).updates))
                 throw new IllegalArgumentException("No hay correspondencia TC/Footiqo B2.1 para TC=" + id);
             if (!seen.add(id)) throw new IllegalArgumentException("Liga duplicada: " + id);
             ids.add(id);
@@ -194,24 +192,15 @@ public final class B21PreviewRunner {
     }
 
     static String ctes(int leagueCount) {
-        if (leagueCount < 1 || leagueCount > KNOWN_IDS.size())
+        if (leagueCount < 1 || leagueCount > LeagueMappingRegistry.load().size())
             throw new IllegalArgumentException("Numero de ligas no valido.");
         StringBuilder ids = new StringBuilder();
         for (int i = 0; i < leagueCount; i++) {
             if (i != 0) ids.append(',');
             ids.append('?');
         }
-        // El formato y las correspondencias TC/Footiqo reproducen B2.1 de la guia.
         return "WITH ligas AS (\n"
-                + " SELECT '1' AS tc_id, 2 AS ls_league_id, 'England Premier League' AS liga\n"
-                + " UNION ALL SELECT '14',1,'Spain La Liga'\n"
-                + " UNION ALL SELECT '12',3,'Italy Serie A'\n"
-                + " UNION ALL SELECT '16',4,'Germany Bundesliga I'\n"
-                + " UNION ALL SELECT '25',5,'France Ligue 1'\n"
-                + " UNION ALL SELECT '137',18,'UEFA Champions League'\n"
-                + " UNION ALL SELECT '138',28,'UEFA Europa League'\n"
-                + " UNION ALL SELECT '2',6,'England Championship'\n"
-                + "), seleccion AS (SELECT * FROM ligas WHERE tc_id IN (" + ids + ")),\n"
+                + " " + LeagueMappingRegistry.sqlCteRows() + "\n"                + "), seleccion AS (SELECT * FROM ligas WHERE tc_id IN (" + ids + ")),\n"
                 + " parametros AS (SELECT CAST(? AS DATETIME) AS desde, CAST(? AS DATETIME) AS hasta, "
                 + " CAST(? AS UNSIGNED) AS tolerancia_minutos),\n"
                 + " pendientes_ls AS (\n"
@@ -225,7 +214,7 @@ public final class B21PreviewRunner {
                 + " AND NOT EXISTS (SELECT 1 FROM tc_match_link old\n"
                 + "   WHERE old.ls_match_id=lm.id AND old.review_status='VERIFIED')\n"
                 + "), candidatos_tc AS (\n"
-                + " SELECT x.ls_league_id, tm.id AS tc_match_pk, tm.tc_match_id AS tc_partido_api,\n"
+                + " SELECT x.tc_id,x.ls_league_id, tm.id AS tc_match_pk, tm.tc_match_id AS tc_partido_api,\n"
                 + " CONVERT_TZ(tm.kickoff_utc,'+00:00','Europe/Madrid') AS kickoff_madrid,\n"
                 + " tm.kickoff_timezone_status, tm.home_team_id AS tc_home_team_pk,\n"
                 + " tm.away_team_id AS tc_away_team_pk, tm.home_goals AS tc_home_goals,\n"
@@ -244,7 +233,7 @@ public final class B21PreviewRunner {
                 + " l.ls_home_goals,l.ls_away_goals,t.tc_home_goals,t.tc_away_goals,\n"
                 + " t.kickoff_timezone_status\n"
                 + " FROM pendientes_ls l CROSS JOIN parametros tol "
-                + "JOIN candidatos_tc t ON t.ls_league_id=l.ls_league_id\n"
+                + "JOIN candidatos_tc t ON t.ls_league_id=l.ls_league_id AND t.tc_id=l.tc_id\n"
                 + " AND t.kickoff_madrid BETWEEN l.kickoff_madrid-INTERVAL tol.tolerancia_minutos MINUTE\n"
                 + "   AND l.kickoff_madrid+INTERVAL tol.tolerancia_minutos MINUTE\n"
                 + " JOIN tc_team_link ht ON ht.tc_team_pk=t.tc_home_team_pk\n"
@@ -284,13 +273,16 @@ public final class B21PreviewRunner {
     }
 
     private static String summarySql() {
-        return "SELECT x.tc_id,x.liga, COUNT(l.ls_match_id) AS pendientes_sin_enlace,\n"
-                + " COALESCE(SUM(IF(r.pares_seguros>0,1,0)),0) AS listos_para_enlazar,\n"
-                + " COALESCE(SUM(IF(r.pares_encontrados>0 AND r.pares_seguros=0,1,0)),0) AS requieren_revision,\n"
-                + " COALESCE(SUM(IF(l.ls_match_id IS NOT NULL AND r.pares_encontrados IS NULL,1,0)),0) AS sin_candidato_tolerancia\n"
-                + " FROM seleccion x LEFT JOIN pendientes_ls l ON l.ls_league_id=x.ls_league_id\n"
+        // Solo el TC primario de cada liga LS presenta los pendientes: no duplicar
+        // el mismo ls_match en la fila de MLS regular y MLS play-offs.
+        String primary = "x.tc_id=(SELECT CAST(MIN(CAST(x2.tc_id AS UNSIGNED)) AS CHAR) FROM seleccion x2 WHERE x2.ls_league_id=x.ls_league_id)";
+        return "SELECT x.tc_id,x.liga, CASE WHEN "+primary+" THEN COUNT(l.ls_match_id) ELSE 0 END AS pendientes_sin_enlace,\n"
+                + " CASE WHEN "+primary+" THEN COALESCE(SUM(IF(r.pares_seguros>0,1,0)),0) ELSE 0 END AS listos_para_enlazar,\n"
+                + " CASE WHEN "+primary+" THEN COALESCE(SUM(IF(r.pares_encontrados>0 AND r.pares_seguros=0,1,0)),0) ELSE 0 END AS requieren_revision,\n"
+                + " CASE WHEN "+primary+" THEN COALESCE(SUM(IF(l.ls_match_id IS NOT NULL AND r.pares_encontrados IS NULL,1,0)),0) ELSE 0 END AS sin_candidato_tolerancia\n"
+                + " FROM seleccion x LEFT JOIN pendientes_ls l ON l.ls_league_id=x.ls_league_id AND l.tc_id=x.tc_id\n"
                 + " LEFT JOIN resumen_ls r ON r.ls_match_id=l.ls_match_id\n"
-                + " GROUP BY x.tc_id,x.liga ORDER BY x.liga";
+                + " GROUP BY x.tc_id,x.liga,x.ls_league_id ORDER BY x.liga";
     }
 
     private static String detailSql() {
@@ -303,6 +295,7 @@ public final class B21PreviewRunner {
                 + " 'SIN_CANDIDATO_EN_TOLERANCIA' FROM pendientes_ls l\n"
                 + " LEFT JOIN resumen_ls r ON r.ls_match_id=l.ls_match_id\n"
                 + " WHERE r.ls_match_id IS NULL\n"
+                + " AND l.tc_id=(SELECT CAST(MIN(CAST(x2.tc_id AS UNSIGNED)) AS CHAR) FROM seleccion x2 WHERE x2.ls_league_id=l.ls_league_id)\n"
                 + " ORDER BY liga, fecha_footiqo,ls_match_id,tc_match_pk";
     }
 }

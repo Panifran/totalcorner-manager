@@ -1,3 +1,53 @@
+## v1.9.5 - Enlace manual directo por IDs compartido entre A6.4 y B2.2
+
+- Nuevo subpanel «Enlace directo por IDs» en ambos bloques. Usar **ls_match.id** y **tc_match.id (PK)**.
+- Primero PREVIEW SQL solo lectura con datos y avisos; despues doble confirmacion para APPLY transaccional.
+- Permite fecha TC muy diferente o NULL y marcador TC ausente; conserva la integridad 1:1, la asociacion LS↔TC y las fechas originales.
+- Requiere revisar la identidad exacta del partido; el control permite excepciones deliberadas, no infiere coincidencias.
+
+# TotalCorner Manager v1.9.4 — A6.3/A6.4 partidos TC sin fecha
+
+TotalCorner Manager v1.9.4 — A6.3/A6.4: candidatos TC sin fecha
+
+- A6.3 busca tambien tc_match.kickoff_utc IS NULL en la competicion TC seleccionada.
+- Proponer REVISAR_TC_SIN_FECHA solo cuando ambos equipos estan VERIFIED para ese par y coincide marcador FT completo; no compara fechas inexistentes.
+- Las propuestas sin fecha muestran fecha TC y delta vacios, y aviso SIN_FECHA_TC | SIN_COMPROBACION_HORARIA | CONFIRMAR_TEMPORADA_Y_FASE. Se mantienen las marcas de alternativas.
+- Nunca se marcan por lotes (ni con «Marcar visibles»); se seleccionan individualmente tras revisar temporada, fase y documentacion externa.
+- A6.4 PREVIEW valida huellas y datos de nuevo. APPLY permite fecha TC NULL solo para esos pares y revalida ambos links VERIFIED y FT coincidente en SQL, con indices UNIQUE, transaccion y ROLLBACK.
+- Se conserva kickoff_utc NULL, fecha TC vacia en CSV y auditoria; no se modifica tc_match ni ls_match ni se hacen llamadas a la API.
+- El cambio se limita a totalcorner-manager, compatible Java 8. Una coincidencia de equipos y FT no demuestra que sea el mismo partido, especialmente entre temporadas diferentes.
+
+INSTALACION:
+Cierra Manager, extrae actualizacion en C:\Users\Javi\eclipse-workspace\, sobrescribe totalcorner-manager.
+Eclipse: F5, Maven > Update Project, Project > Clean. Ejecuta TotalCornerManager.java.
+A6.3 con LS=7 y TC=85: consultar y filtrar REVISAR_TC_SIN_FECHA. Comprueba LS 153534 / TC PK 35362 si los datos realmente coinciden. Primero simula A6.4. No reutilices CSV antiguos.
+
+---
+# TotalCorner Manager v1.9.3 — LS -> múltiples TC sin publicar automáticamente
+
+- Registro común `~/.totalcorner-manager-tc-ls-mappings.properties`: una liga LS puede corresponder a varias competiciones TC. Se conservan los IDs originales de cada partido y sus enlaces.
+- En Bloque 1, **Guardar liga** incorpora la asociación al registro (sin activar actualizaciones). A1–A6 continúan siendo independientes **por TC**, por lo que para MLS Play-offs se utiliza LS=7, TC=596. Los avances previos TC=85 no se pierden.
+- Botón **Activar actualizaciones B1–B4**: disponible tras A1–A3 de esa competición, con confirmación explícita. No modifica `totalcorner-history.properties` ni activa publicación B5–B7.
+- B1/B2 utilizan el registro común; B2.1 cruza varias competiciones TC con el mismo LS y controla la unicidad global. Los totales de partidos LS pendientes aparecen solo una vez por liga LS, en la fila de TC primario (ID menor seleccionado).
+- B2.3 admite varias competiciones TC para la misma LS con una fila por liga LS. B3/B4 ya trabajan por TC; el Manager genera una configuración temporal que incluye las competiciones activadas aunque no estén en el properties principal.
+- A5.3 incorpora **Confirmar equipos VERIFIED existentes (0 INSERT)** cuando A5.1 ha comprobado que *todos* los equipos de una competición TC tienen ya mapping VERIFIED contra LS y existe CSV A5.2 válido.
+- `LS=7 / TC=85` y `LS=7 / TC=596` son asociaciones **separadas**, pero ambas aparecerán bajo LS=7. TC=596 no se marca verificada por API ni se descarga automáticamente. No hay cambios en `ls_match`, `tc_match_link`, cuotas o JSON.
+
+## Instalar
+
+Cierra Manager, descomprime actualización en `C:\Users\Javi\eclipse-workspace\` y sobrescribe `totalcorner-manager`. En Eclipse: F5, Maven > Update Project, Project > Clean, Run TotalCornerManager.
+
+## Probar MLS Play-offs sin escrituras de enlaces
+
+1. Bloque 1: LS=7, TC=596, nombre esperado API **MLS Play-offs**. Pulsa **Guardar liga**.
+2. A1: verificar TC=596 con API. Si la API confirma ID y nombre, continuar A2 y A3 con su propia configuración. No modificar el histórico original.
+3. A4 y A5.1: comprobar temporadas y mappings. Si existen mappings `VERIFIED`, despues de A5.2 puedes confirmar su reutilizacion parcial sin insertar enlaces nuevos. Los equipos sin mapping permanecen pendientes y A6 utiliza exclusivamente equipos verificados.
+4. A6.1/A6.2: comprobar candidatos seguros dentro de TC596; A6.3/A6.4 para el resto. Confirmar resultados antes de aplicar.
+5. Una vez validada, activar TC596 en Bloque 2. Recargar ligas de actualización. B3/B4 pueden descargar/procesar aunque LS=7 siga excluida de B5-B7.
+
+**Limitaciones:** el modelo permite múltiples IDs TC por LS pero cada una conserva sus estados A1-A6 independientes. En B2.1 los pendientes LS se agregan por liga y se muestran bajo el TC primario; los candidatos TC de ambas competiciones cuentan para la ambigüedad global. La importación se prueba localmente sin MySQL ni token API; todas las inserciones deben simularse en el PC antes de ejecutarse.
+
+---
 # TotalCorner Manager v1.9.1 — A6.3/A6.4 revisión y enlaces manuales
 
 Consulta `NOTAS_1_9_0.txt`. Integra una pantalla tipo B2.2 para buscar pendientes y enlazar parejas revisadas de cualquier liga seleccionada. Mantiene A1–A6.2, B1–B7 y los datos existentes; no añade ligas a los productos comerciales.

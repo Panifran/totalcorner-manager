@@ -1,0 +1,15 @@
+TotalCorner Manager 1.9.7 - Correccion B1.1 (MySQL 1267)
+
+Cambio: comparacion de IDs TC numerica en las dos subconsultas que
+identifican la competicion principal de una liga LS (mapping 1:N).
+Se evita comparar VARCHAR y CAST(... AS CHAR) con collations diferentes.
+
+B1.1: ahora muestra el mensaje MySQL (SQLState y codigo) cuando falla.
+No hay modificaciones de tablas, escrituras SQL ni cambios en descargas.
+
+Instalacion: cerrar Manager, sustituir los fuentes en totalcorner-manager,
+actualizar Eclipse (F5, Project > Clean) y ejecutar de nuevo B1.1.
+No actualizar totalcorner-downloader.
+
+Nota: el diagnostico es probable a partir del codigo y error 1267,
+pero la consulta nueva se debe verificar contra MySQL real.

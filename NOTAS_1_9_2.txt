@@ -1,0 +1,32 @@
+TotalCorner Manager 1.9.2 - Asociaciones 1:N Footiqo LS -> TotalCorner TC
+
+INSTALACION (solo totalcorner-manager)
+1. Cerrar Manager.
+2. Extraer el ZIP de actualizacion en C:\Users\Javi\eclipse-workspace\, sobrescribiendo totalcorner-manager.
+3. Eclipse: F5, Maven > Update Project y Project > Clean.
+4. Ejecutar TotalCornerManager.java (version --version 1.9.2).
+5. No agregar dist/totalcorner-manager-1.9.1.jar al classpath: es una version antigua.
+
+NUEVO
+- Registro de asociaciones: C:\Users\Javi\.totalcorner-manager-tc-ls-mappings.properties (user.home de Windows).
+- Una liga LS admite varios TC: por ejemplo LS 7 -> TC 85 y TC 596.
+- Bloque 1 usa una ficha/proceso A1-A6 independiente por competicion TC, pero muestra las asociaciones LS.
+- Guardar liga registra la asociacion sin activarla para actualizaciones.
+- Tras A3 puedes activar/desactivar TC para B1-B4, sin tocar el properties principal ni la publicacion comercial.
+- B1/B2 ya no asumen que hay 8 ligas. B2.1 comprueba unicidad LS-TC entre todas las competiciones seleccionadas de una misma LS.
+- B2.3 agrupa por liga LS aunque varias TC correspondan a ella.
+- B3/B4 generan properties derivados para incluir las TC activas sin editar el principal.
+- A5.3 permite confirmar que todos los equipos estan VERIFIED, sin nuevos INSERT, tras A5.1/A5.2.
+- A6.2 permite confirmar 0 candidatos seguros y pasar a A6.3 manual.
+
+EJEMPLO MLS PLAY-OFFS
+- Bloque 1: LS=7 TC=596, nombre segun respuesta real de API.
+- Guardar liga, A1 API, A2, A3, A4, A5.1. Continuar equipos y partidos con A5/A6.
+- No se modifica lo ya cargado para LS=7 TC=85.
+- Solo cuando lo desees: Activar actualizaciones B1-B4; B5-B7 siguen excluyendo MLS si LS=7 no figura en exportacion/publicacion.
+
+LIMITACIONES
+- A1-A6 permanecen por competicion TC, no se ejecutan simultaneamente para varias TC.
+- No se ha ejecutado MySQL ni API reales desde este entorno. Primero simular antes de escribir.
+- El registro se guarda en user.home: hacer copia si trabajas en otro ordenador o reinstalas Windows.
+- Si los recuentos B1/B2 muestran alguna discrepancia en la misma LS al seleccionar dos TC, detener la ejecucion y revisar logs antes de guardar enlaces.

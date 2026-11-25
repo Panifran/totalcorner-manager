@@ -1,0 +1,33 @@
+TotalCorner Manager v1.9.10 - Correccion definitiva de borrado de resultados B1.1
+
+CAUSA CONFIRMADA EN CODIGO:
+- B11ControlRunner devolvia 8 filas (B11_DONE 8 8), como muestra el log v1.9.9.
+- TotalCornerManager.setBusy(...) llamaba a NewLeaguePanel.setExternalBusy(...).
+- setExternalBusy(...) invocaba refresh() del Bloque 1.
+- refresh() notificaba onStateChanged de manera incondicional, aun cuando no
+  habia cambiado ninguna asociacion LS/TC.
+- La notificacion llamaba loadLeagues(false) en el Bloque 2, que ejecutaba
+  controlModel.setRowCount(0) y restauraba el mensaje 'Cargadas 8...'.
+
+CORRECCION:
+- NewLeaguePanel.refresh() deja de notificar cambios de asociaciones.
+- La notificacion explicita al activar/desactivar actualizaciones sigue en
+  toggleUpdates, donde si existe un cambio real de configuracion.
+- Se mantiene la traza B1.1 de la version 1.9.9.
+- Ninguna consulta SQL ni esquema MySQL ha sido modificado.
+
+PRUEBAS:
+- Compilacion Java 8 (--release 8, bytecode major 52).
+- Reproduccion antes: callback invocado al construir y dos veces al pasar por busy.
+- Despues: cero notificaciones espurias por cambios de busy.
+- Prueba Swing real (Xvfb): tras setBusy(true)/setBusy(false), B1.1 conserva sus filas.
+- Pruebas --self-test-a1, a4, a51, a52, a53, a61, a62, progress y b7.
+
+INSTALACION EN ECLIPSE:
+1. Cerrar TotalCorner Manager.
+2. Extraer actualizacion en C:\Users\Javi\eclipse-workspace\ sobreescribiendo los archivos.
+3. Eclipse: Refresh, Maven > Update Project y Project > Clean (totalcorner-manager).
+4. Reiniciar y verificar version 1.9.10 con --version o en el titulo.
+5. Bloque 2 > B1.1 > Consultar estado. Esperado: 8 filas, 3 pendientes.
+
+No requiere volver a ejecutar B1.2 ni reescribir datos.

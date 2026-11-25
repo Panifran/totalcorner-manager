@@ -1,0 +1,28 @@
+TotalCorner Manager v1.9.5 — Enlace excepcional por IDs (A6.4 y B2.2)
+
+CAMBIOS
+- Nuevo formulario COMPARTIDO en Bloque 1 > A6.3-A6.4 > Enlace directo por IDs.
+- El mismo formulario en Bloque 2 > B2.2 > Enlace directo por IDs.
+- Permite buscar explicitamente ls_match.id y tc_match.id (PK INTERNO TC, no tc_match_id de API).
+- SIMULAR solo consulta MySQL; muestra ambas ligas, equipos, fechas, marcadores, datos de TC, mappings VERIFIED, avisos y enlaces existentes.
+- Se permiten en modo excepcional diferencias horarias superiores al margen general, TC sin fecha o sin marcador, y equipos sin mapping VERIFIED, siempre previa comprobacion manual.
+- La pertenencia de ambas competiciones al mismo LS debe estar registrada en el mapa LS -> N TC.
+- No permite enlaces cuando LS no esta finalizado, alguno ya tiene otro enlace (cualquier estado), falta UNIQUE por ID o los datos cambian desde la simulacion.
+- APLICAR exige huella de simulacion valida y doble confirmacion; bloquea ambas filas en transaccion, valida de nuevo y hace INSERT VERIFIED con match_method=MATCH_MANUAL_REVIEW.
+- Si hay conflictos, ROLLBACK. No modifica ls_match, tc_match, equipos ni marcadores.
+- Audita el enlace en CSV con separador coma, UTF-8 BOM y timestamps originales.
+- Tras insertar, las tablas de candidatos deben consultarse de nuevo para reflejar la pareja enlazada.
+
+EJEMPLO DE PRUEBA
+- Bloque 1 > seleccionar MLS (LS=7, TC=85).
+- A6.3-A6.4 > pestaña Enlace directo por IDs: LS=20870, TC PK=36862.
+- SIMULAR, COMPROBAR ambos partidos; si son realmente el mismo, CONFIRMAR y ENLAZAR.
+- No buscar ni aplicar automaticamente por la similitud del nombre.
+
+INSTALACION
+Cierra Manager. Extrae el ZIP de actualizacion en C:\Users\Javi\eclipse-workspace\.
+Eclipse: F5, Maven > Update Project, Project > Clean (totalcorner-manager).
+Ejecuta TotalCornerManager.java. No necesitas repetir A1-A6.3 ni modificar MySQL fuera de Manager.
+
+NOTA
+Las pruebas locales y de compilacion Java 8 no sustituyen probar la simulacion/COMMIT con MySQL real.

@@ -1,0 +1,14 @@
+TotalCorner Manager v1.9.4 — A6.3/A6.4: candidatos TC sin fecha
+
+- A6.3 busca tambien tc_match.kickoff_utc IS NULL en la competicion TC seleccionada.
+- Proponer REVISAR_TC_SIN_FECHA solo cuando ambos equipos estan VERIFIED para ese par y coincide marcador FT completo; no compara fechas inexistentes.
+- Las propuestas sin fecha muestran fecha TC y delta vacios, y aviso SIN_FECHA_TC | SIN_COMPROBACION_HORARIA | CONFIRMAR_TEMPORADA_Y_FASE. Se mantienen las marcas de alternativas.
+- Nunca se marcan por lotes (ni con «Marcar visibles»); se seleccionan individualmente tras revisar temporada, fase y documentacion externa.
+- A6.4 PREVIEW valida huellas y datos de nuevo. APPLY permite fecha TC NULL solo para esos pares y revalida ambos links VERIFIED y FT coincidente en SQL, con indices UNIQUE, transaccion y ROLLBACK.
+- Se conserva kickoff_utc NULL, fecha TC vacia en CSV y auditoria; no se modifica tc_match ni ls_match ni se hacen llamadas a la API.
+- El cambio se limita a totalcorner-manager, compatible Java 8. Una coincidencia de equipos y FT no demuestra que sea el mismo partido, especialmente entre temporadas diferentes.
+
+INSTALACION:
+Cierra Manager, extrae actualizacion en C:\Users\Javi\eclipse-workspace\, sobrescribe totalcorner-manager.
+Eclipse: F5, Maven > Update Project, Project > Clean. Ejecuta TotalCornerManager.java.
+A6.3 con LS=7 y TC=85: consultar y filtrar REVISAR_TC_SIN_FECHA. Comprueba LS 153534 / TC PK 35362 si los datos realmente coinciden. Primero simula A6.4. No reutilices CSV antiguos.

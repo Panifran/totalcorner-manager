@@ -121,9 +121,12 @@ public final class WorkflowDashboardPanel extends JPanel {
              a52?"CSV generado para revision: "+newLeague.a52When():
                  a51?"Generar propuestas con evidencia de partidos y CSV; NO inserta mappings":"Requiere A5.1 comprobado");
         boolean a53=newLeague.a53Applied();
-        row(aModel,a53?"✓ Lote":"○ Pendiente","A5.3 · Enlazar equipos",
+        boolean reusedA53=a53 && "REUSE".equals(newLeague.a53Mode());
+        row(aModel,reusedA53?"✓ Reutiliza":a53?"✓ Lote":"○ Pendiente","A5.3 · Enlazar equipos",
+            reusedA53?"VERIFIED reutilizados="+newLeague.a53ReusedCount()+" | sin mapping="+newLeague.a53UnmappedCount()+
+                " | 0 INSERT. A6 solo utilizara los mappings VERIFIED.":
             a53?"Ultimo lote confirmado: "+newLeague.a53Count()+" enlaces VERIFIED | "+newLeague.a53When()+". Quedan pendientes por revisar los no aplicados.":
-                a52?"Cargar CSV A5.2, seleccionar estados y filas, simular y confirmar insercion":"Requiere CSV A5.2");
+                a52?"Aplicar enlaces revisados o confirmar los VERIFIED existentes para continuar":"Requiere CSV A5.2");
         boolean a61=newLeague.a61Checked();
         row(aModel,a61?"✓ CSV":"○ Pendiente","A6.1 · Previsualizar partidos",
             a61?"CSV generado: "+newLeague.a61When()+" | seguros propuestos: "+newLeague.a61Count()+"; no enlazados aun":
@@ -140,7 +143,15 @@ public final class WorkflowDashboardPanel extends JPanel {
         row(aModel,a64?"✓ Lote":"○ Pendiente","A6.4 · Enlazar manual",
             a64?"Ultimo lote revisado: "+newLeague.a64Count()+" VERIFIED | "+newLeague.a64When()+". Reconsultar A6.3":
             "Marcar parejas individualmente en A6.3, simular y aplicar A6.4");
-        row(aModel,"· Futuro","A7 · Descargar cuotas","Datos multi-bookmaker de liga nueva");
+        String testedA71=newLeague.a71When();
+        row(aModel,testedA71.isEmpty()?"○ Pendiente":"✓ Prueba","A7.1 · Probar cuotas",
+            testedA71.isEmpty()?"Simular y descargar un partido con ambos endpoints por competicion TC":
+                "Dos endpoints procesados o DONE validos: "+testedA71);
+        String lastA72=newLeague.a72LastRun();
+        row(aModel,lastA72.isEmpty()?"○ Pendiente":"! Auditar","A7.2 · Descargar historico",
+            lastA72.isEmpty()?"Descargar por lotes tras A7.1; trabajos reanudables":
+                "Ultimo lote: "+lastA72+". Falta auditoria A7.3 antes de dar el historico por completo");
+        row(aModel,"· Futuro","A7.3 · Comprobar JSON","Auditar jobs, JSON validos, cobertura y partidos sin fecha");
         row(aModel,"· Futuro","A8 · Auditar cobertura","Comprobar datos y recalcular tc_cov_*");
         row(aModel,"· Futuro","A9 · Exportar datasets","Generacion comercial y revision antes de publicar");
         progressRow("B1.1","B1.1 · Consultar estado","Consultar al inicio y de nuevo tras B1.2");
@@ -187,16 +198,23 @@ public final class WorkflowDashboardPanel extends JPanel {
             nextRoute=10;nextAStage=7;
             if(newLeague.a61Checked())nextAStage=8;
             if(newLeague.a62Applied())nextAStage=9;
-            summary.setText(newLeague.a62Applied()?"Bloque 01: siguiente A6.3/A6.4 · Buscar pendientes, marcar y aplicar manualmente.":
+            summary.setText(newLeague.a62Applied()?"Bloque 01: A6 aplicado. Continuar A7.1 para probar cuotas historicas de la competicion TC.":
                 newLeague.a61Checked()?"Bloque 01: siguiente A6.2 · Simular y aplicar candidatos seguros.":
                 "Bloque 01: siguiente A6.1 · Previsualizar partidos y revisar CSV.");
+            if(newLeague.a62Applied()){
+                nextAStage=newLeague.a71When().isEmpty()?10:11;
+                summary.setText(newLeague.a71When().isEmpty()?"Bloque 01: siguiente A7.1 · Probar cuotas de un partido.":
+                    "Bloque 01: siguiente A7.2 · Descargar cuotas historicas por lotes.");
+            }
             next.setEnabled(true);
         }
     }
     private void openSelection(){
         int a=aTable.getSelectedRow(),b=bTable.getSelectedRow();
         if(a>=0){
-            if(a<=10){navigate.accept(10);newLeague.selectStage(Math.min(a,9));}
+            if(a<=12){navigate.accept(10);
+                int[] stageIndex={0,1,2,3,4,5,6,7,8,9,9,10,11};
+                newLeague.selectStage(stageIndex[Math.max(0,Math.min(a,12))]);}
             else JOptionPane.showMessageDialog(this,"Esta etapa del Bloque 01 todavia no esta integrada en el gestor.","Siguiente modulo",JOptionPane.INFORMATION_MESSAGE);
         } else if(b>=0){navigate.accept(b);}else JOptionPane.showMessageDialog(this,"Selecciona un proceso en una de las tablas.");
     }

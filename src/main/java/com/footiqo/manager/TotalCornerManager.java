@@ -177,7 +177,7 @@ public final class TotalCornerManager extends JFrame {
 
     public static void main(String[] args) {
         if (args.length > 0 && "--version".equals(args[0])) {
-            System.out.println("TotalCorner Manager 1.9.1 - Flujo B1.1 > B1.2 > B2.1 > B2.2 > B2.3 > B3 > B4 > B5 > B6 > B7 - Java 8 compatible");
+            System.out.println("TotalCorner Manager 1.9.11 - Flujo B1.1 > B1.2 > B2.1 > B2.2 > B2.3 > B3 > B4 > B5 > B6 > B7 - Java 8 compatible");
             return;
         }
         if (args.length > 0 && "--self-test-b7".equals(args[0])) {
@@ -185,6 +185,7 @@ public final class TotalCornerManager extends JFrame {
             return;
         }
         if (args.length > 0 && "--self-test-a1".equals(args[0])) { NewLeaguePanel.selfTest(); return; }
+        if (args.length > 0 && "--self-test-a72".equals(args[0])) { NewLeaguePanel.selfTestA72(); return; }
         if (args.length > 0 && "--self-test-a4".equals(args[0])) { A4AuditRunner.main(new String[]{"--self-test"}); return; }
         if (args.length > 0 && "--self-test-a51".equals(args[0])) { A51ExistingTeamsRunner.main(new String[]{"--self-test"}); return; }
         if (args.length > 0 && "--self-test-a52".equals(args[0])) { A52TeamCandidatesRunner.main(new String[]{"--self-test"}); return; }
@@ -205,7 +206,7 @@ public final class TotalCornerManager extends JFrame {
     }
 
     private TotalCornerManager() {
-        super("Footiqo - TotalCorner Manager | Bloque 01 / Bloque 02 / Panel general");
+        super("Footiqo - TotalCorner Manager v1.9.11 | Bloque 01 / Bloque 02 / Panel general");
         setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
         setSize(1190, 870);
         setMinimumSize(new Dimension(900, 650));
@@ -425,7 +426,20 @@ public final class TotalCornerManager extends JFrame {
         b22Table.getTableHeader().setReorderingAllowed(false);
         int[] b22Widths = {65, 205, 180, 90, 95, 230, 230, 155, 155, 92, 140};
         for (int i = 0; i < b22Widths.length; i++) b22Table.getColumnModel().getColumn(i).setPreferredWidth(b22Widths[i]);
-        b22Panel.add(ManagerUiSupport.withTotals(b22Table), BorderLayout.CENTER);
+        JTabbedPane b22Modes=new JTabbedPane();
+        b22Modes.addTab("Candidatos B2.2",ManagerUiSupport.withTotals(b22Table));
+        ManualMatchByIdsPanel directB22=new ManualMatchByIdsPanel(
+            () -> project.getText(),() -> java8.getText(),() -> {
+                StringJoiner ids=new StringJoiner(",");
+                for(League selected:leagues.getSelectedValuesList())ids.add(selected.id);
+                return ids.toString();
+            },() -> busy,v -> setBusy(v),() -> {
+                invalidateB22();b21Model.setRowCount(0);b21DetailModel.setRowCount(0);
+                b21Guidance.setText("Enlace directo aplicado: repetir B2.1 para actualizar los recuentos.");
+                markProgress("B2.2",WorkflowProgress.DONE,"Enlace por IDs aplicado; repetir B2.1 y control de B3");
+            });
+        b22Modes.addTab("Enlace directo por IDs",directB22);
+        b22Panel.add(b22Modes, BorderLayout.CENTER);
         b22Guidance.setBorder(new EmptyBorder(8, 0, 8, 0));
         b22Panel.add(b22Guidance, BorderLayout.SOUTH);
         tabs.addTab("4. B2.2 Enlazar", b22Panel);
@@ -439,7 +453,7 @@ public final class TotalCornerManager extends JFrame {
         b7Panel = new B7PublishPanel(() -> b5Panel.publicationSettings(), () -> busy, v -> setBusy(v));
         tabs.addTab("10. B7 Publicar", b7Panel);
         newLeaguePanel = new NewLeaguePanel(() -> project.getText(), () -> java8.getText(),
-                () -> busy, v -> setBusy(v), () -> { if (dashboardPanel != null) dashboardPanel.refreshState(); });
+                () -> busy, v -> setBusy(v), () -> { loadLeagues(false); if (dashboardPanel != null) dashboardPanel.refreshState(); });
         dashboardPanel = new WorkflowDashboardPanel(newLeaguePanel, progress,
                 () -> isB12ConfirmedForCurrentCycle(), () -> lastConfirmedB12At,
                 i -> {
@@ -556,6 +570,15 @@ public final class TotalCornerManager extends JFrame {
                 league.priority = Integer.parseInt(p.getProperty("league." + id + ".priority", "100").trim());
                 items.add(league);
             }
+            // Asociaciones activadas expresamente desde Bloque 1.
+            // El fichero comercial de ocho ligas permanece intacto.
+            for(LeagueMappingRegistry.Association a:LeagueMappingRegistry.load().values()){
+                // Una liga historica que el usuario quito del properties sigue fuera.
+                if(!a.updates||LeagueMappingRegistry.isBaseline(a.tcId)||!seen.add(a.tcId))continue;
+                League l=new League();l.id=a.tcId;l.name=a.name;
+                l.priority=Integer.parseInt(p.getProperty("league."+a.tcId+".priority","100").trim());
+                items.add(l);
+            }
             Collections.sort(items, new Comparator<League>() {
                 @Override public int compare(League a, League b) {
                     int r = Integer.compare(a.priority, b.priority);
@@ -564,7 +587,7 @@ public final class TotalCornerManager extends JFrame {
             });
             for (League league : items) leagueModel.addElement(league);
             if (!items.isEmpty()) leagues.setSelectionInterval(0, items.size() - 1);
-            status.setText("Cargadas " + items.size() + " ligas del fichero de configuracion.");
+            status.setText("Cargadas " + items.size() + " competiciones TC (properties + asociaciones activas de Bloque 1). No cambia la publicacion comercial.");
         } catch (Exception e) {
             status.setText("No se pudieron cargar las ligas: " + e.getMessage());
             if (alert) JOptionPane.showMessageDialog(this, e.getMessage(), "Configuracion de ligas", JOptionPane.ERROR_MESSAGE);
@@ -580,7 +603,7 @@ public final class TotalCornerManager extends JFrame {
         try {
             dir = Paths.get(project.getText().trim()).toAbsolutePath().normalize();
             javaPath = Paths.get(java8.getText().trim()).toAbsolutePath().normalize();
-            properties = Paths.get(config.getText().trim()).toAbsolutePath().normalize();
+            properties = selectedRunProperties(dir,"b1");
             if (!Files.isDirectory(dir) || !Files.isRegularFile(dir.resolve("pom.xml")))
                 throw new IOException("Selecciona la carpeta raiz de totalcorner-downloader (contiene pom.xml).");
             if (!Files.isRegularFile(javaPath)) throw new IOException("No se encontro el ejecutable de Java 8.");
@@ -834,9 +857,13 @@ public final class TotalCornerManager extends JFrame {
             return;
         }
         final Path dir;
+        final Path logPath;
         final List<String> command = new ArrayList<String>();
         try {
             dir = Paths.get(project.getText().trim()).toAbsolutePath().normalize();
+            logPath = dir.resolve("target/totalcorner-manager-logs")
+                    .resolve("B-b11-" + java.time.LocalDateTime.now()
+                    .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS")) + ".log");
             Path javaPath = Paths.get(java8.getText().trim()).toAbsolutePath().normalize();
             if (!Files.isDirectory(dir) || !Files.isRegularFile(dir.resolve("pom.xml")))
                 throw new IOException("Selecciona la carpeta raiz de totalcorner-downloader.");
@@ -856,7 +883,7 @@ public final class TotalCornerManager extends JFrame {
             saveSettings();
             controlModel.setRowCount(0);
             guidance.setText("<html><b>Consultando B1.1...</b> Solo lectura; no se llama a la API.</html>");
-            status.setText("Consultando estado de " + selected.size() + " ligas (MySQL solo lectura)...");
+            status.setText("B1.1 v1.9.11 consultando " + selected.size() + " ligas. Log: " + logPath);
             setBusy(true);
             cancelledByUser = false;
         } catch (Exception err) {
@@ -867,15 +894,20 @@ public final class TotalCornerManager extends JFrame {
             @Override protected ControlResponse doInBackground() {
                 ControlResponse resp = new ControlResponse();
                 try {
+                    Files.createDirectories(logPath.getParent());
                     ProcessBuilder pb = new ProcessBuilder(command);
                     pb.directory(dir.toFile());
                     pb.redirectErrorStream(true);
                     pb.environment().remove("TOTALCORNER_API_TOKEN"); // No requiere API
                     Process p = pb.start();
                     child = p;
-                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
+                    try (BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8));
+                         BufferedWriter log = Files.newBufferedWriter(logPath, StandardCharsets.UTF_8)) {
+                        log.write("B11_UI_VERSION\t1.9.11\trequested=" + selected.size() + "\tmanager_class=" + managerCodeLocation());
+                        log.newLine();
                         String line;
                         while ((line = reader.readLine()) != null) {
+                            log.write(line);log.newLine();
                             if (line.startsWith("B11_ROW\t")) {
                                 String[] fields = line.split("\t", -1);
                                 if (fields.length == 10) resp.rows.add(Arrays.copyOfRange(fields, 1, 10));
@@ -899,8 +931,8 @@ public final class TotalCornerManager extends JFrame {
                         resp.error = "El proceso de consulta termino con codigo " + exit;
                     else if (resp.error == null && (resp.received != selected.size()
                             || resp.expected != selected.size() || resp.rows.size() != selected.size()))
-                        resp.error = "Se solicitaron " + selected.size() + " ligas, pero MySQL devolvio "
-                                + resp.rows.size() + ". Comprueba tc_league.enabled y los IDs; no se puede dar el control por valido.";
+                        resp.error = "Se solicitaron " + selected.size() + " ligas, pero el proceso devolvio "
+                                + resp.rows.size() + " filas; ver B11_TRACE y B11_DB_LEAGUE en el log.";
                 } catch (Exception e) {
                     resp.error = "Error B1.1: " + e.getClass().getSimpleName()
                             + (e.getMessage() == null ? "" : " - " + e.getMessage());
@@ -915,7 +947,7 @@ public final class TotalCornerManager extends JFrame {
                 if (resp.error != null) {
                     guidance.setText("<html><b>B1.1 sin confirmar:</b> " + htmlEscape(resp.error)
                             + ". No se ha modificado MySQL.</html>");
-                    status.setText("B1.1 pendiente: " + resp.error);
+                    status.setText("B1.1 pendiente: " + resp.error + " | Log: " + logPath);
                     flowStatus.setText("PASO PENDIENTE: no se pudo completar la consulta B1.1.");
                     JOptionPane.showMessageDialog(TotalCornerManager.this, resp.error,
                             "B1.1 - revisar consulta", JOptionPane.WARNING_MESSAGE);
@@ -926,8 +958,8 @@ public final class TotalCornerManager extends JFrame {
                     flowStatus.setText(refreshedThisCycle
                             ? "Paso 3: B1.2 confirmado y B1.1 revisado. Continuar con B2.1 (pestana 3)."
                             : "Paso 2: refrescar B1.2 (aunque no haya pendientes locales).");
-                    status.setText("B1.1 completado: " + resp.rows.size()
-                            + " ligas consultadas, 0 escrituras, 0 peticiones API.");
+                    status.setText("B1.1 v1.9.11 completado: " + resp.rows.size()
+                            + " ligas consultadas; log: " + logPath);
                     markProgress("B1.1",WorkflowProgress.DONE,refreshedThisCycle?
                         "Control revisado despues de B1.2, ligas="+resp.rows.size():
                         "Control inicial, ligas="+resp.rows.size()+"; falta B1.2");
@@ -1407,16 +1439,14 @@ public final class TotalCornerManager extends JFrame {
         try {Path p=Paths.get(filename);configStamp=Files.getLastModifiedTime(p).toMillis()+":"+Files.size(p);}catch(Exception ignored){}
         try {Path p=Paths.get(project.getText().trim()).resolve("target/classes/com/footiqo/totalcorner/OddsCoverageBuilder.class");
             builderStamp=Files.getLastModifiedTime(p).toMillis()+":"+Files.size(p);}catch(Exception ignored){}
-        return chosenIds()+"|"+filename+"|"+configStamp+"|"+builderStamp+"|"+b4Limit.getValue()+"|"+b4Minutes.getValue();
+        return chosenIds()+"|"+filename+"|"+configStamp+"|"+mappingStamp()+"|"+builderStamp+"|"+b4Limit.getValue()+"|"+b4Minutes.getValue();
     }
     private Path selectedB4Properties(Path dir)throws IOException {
         Path from=Paths.get(config.getText().trim());
         if(!Files.isRegularFile(from))throw new IOException("No existe config de ligas: "+from);
         Properties props=new Properties();try(InputStream in=Files.newInputStream(from)){props.load(in);}
         String csv=chosenIds();if(csv.isEmpty())throw new IOException("Selecciona ligas para B4");
-        Set<String> configured=new HashSet<String>();for(String raw:props.getProperty("league.ids","").split(","))configured.add(raw.trim());
-        for(String id:csv.split(","))if(!configured.contains(id))throw new IOException("Liga "+id+" ausente del properties original");
-        props.setProperty("league.ids",csv);
+        LeagueMappingRegistry.augmentSelected(props,csv);
         Path folder=dir.resolve("target").resolve("totalcorner-manager");Files.createDirectories(folder);
         Path path=folder.resolve("b4-selected-"+csv.replace(',','-')+".properties");
         try(OutputStream out=Files.newOutputStream(path)){props.store(out,"Seleccion de ligas B4 por TotalCorner Manager");}
@@ -1655,6 +1685,11 @@ public final class TotalCornerManager extends JFrame {
         if(blank(System.getenv("TOTALCORNER_DB_PASSWORD")))throw new IOException("Falta TOTALCORNER_DB_PASSWORD (reinicia Eclipse tras configurarlo)");
         return new ArrayList<String>(Arrays.asList(javaPath.toString(),"-Dfile.encoding=UTF-8","-cp",managerCodeLocation()+File.pathSeparator+buildClasspath(dir),main));
     }
+    private static String mappingStamp() {
+        try {Path p=LeagueMappingRegistry.FILE;return Files.isRegularFile(p)?
+            Files.getLastModifiedTime(p).toMillis()+":"+Files.size(p):"defaults";}
+        catch(IOException ex){return "mapping-error";}
+    }
     private String chosenIds() {
         StringJoiner j=new StringJoiner(",");for(League l:leagues.getSelectedValuesList())j.add(l.id);
         return j.toString();
@@ -1675,7 +1710,7 @@ public final class TotalCornerManager extends JFrame {
         setBusy(true);cancelledByUser=false;
         new SwingWorker<B23Response,Void>(){
             @Override protected B23Response doInBackground() {
-                B23Response r=new B23Response();r.expected=chosen.size();
+                B23Response r=new B23Response();r.expected=(int)chosen.stream().map(l -> LeagueMappingRegistry.load().get(l.id).lsId).distinct().count();
                 try {
                     ProcessBuilder pb=new ProcessBuilder(args);pb.directory(dir.toFile());pb.redirectErrorStream(true);
                     pb.environment().remove("TOTALCORNER_API_TOKEN");
@@ -1745,7 +1780,7 @@ public final class TotalCornerManager extends JFrame {
             runnerStamp=Files.getLastModifiedTime(f).toMillis()+":"+Files.size(f);}catch(Exception ignored){}
         try {Path f=Paths.get(project.getText().trim()).resolve("target/classes/com/footiqo/totalcorner/LeagueOddsBatchDownloader.class");
             batchStamp=Files.getLastModifiedTime(f).toMillis()+":"+Files.size(f);}catch(Exception ignored){}
-        return chosenIds()+"|"+source+"|"+stamp+"|"+runnerStamp+"|"+batchStamp+"|"+
+        return chosenIds()+"|"+source+"|"+stamp+"|"+mappingStamp()+"|"+runnerStamp+"|"+batchStamp+"|"+
             b3Newest.getValue()+"|"+b3Oldest.getValue()+"|"+b3Batch.getValue()+"|"+b3Requests.getValue()+"|"+b3Hours.getValue();
     }
     /** Preserva properties original y escribe variante solo con las ligas seleccionadas. */
@@ -1753,14 +1788,25 @@ public final class TotalCornerManager extends JFrame {
         Path from=Paths.get(config.getText().trim());if(!Files.isRegularFile(from))throw new IOException("No existe config de ligas: "+from);
         Properties props=new Properties();try(InputStream in=Files.newInputStream(from)){props.load(in);}
         String csv=chosenIds();if(csv.isEmpty())throw new IOException("Selecciona ligas para B3");
-        Set<String> configured=new HashSet<String>();for(String raw:props.getProperty("league.ids", "").split(","))configured.add(raw.trim());
-        for(String id:csv.split(","))if(!configured.contains(id))throw new IOException("Liga "+id+" ausente del properties original");
-        props.setProperty("league.ids",csv);
+        LeagueMappingRegistry.augmentSelected(props,csv);
         Path folder=dir.resolve("target").resolve("totalcorner-manager");Files.createDirectories(folder);
         // Nombre estable = permite ver la seleccion sin reescribir el original.
         Path dest=folder.resolve("b3-selected-"+csv.replace(',','-')+".properties");
         try(OutputStream out=Files.newOutputStream(dest)){props.store(out,"Configuracion derivada por TotalCorner Manager - no editar original");}
         return dest;
+    }
+    /** Properties temporal reanudable para B1.2, sin modificar el original.
+      * Los IDs TC nuevos deben estar ACTIVOS en el registro compartido. */
+    private Path selectedRunProperties(Path dir,String stage)throws IOException {
+        Path source=Paths.get(config.getText().trim());
+        if(!Files.isRegularFile(source))throw new IOException("No existe properties: "+source);
+        Properties p=new Properties();try(InputStream in=Files.newInputStream(source)){p.load(in);}
+        String ids=chosenIds();if(ids.isEmpty())throw new IOException("Selecciona ligas para "+stage);
+        LeagueMappingRegistry.augmentSelected(p,ids);
+        Path folder=dir.resolve("target/totalcorner-manager");Files.createDirectories(folder);
+        Path file=folder.resolve(stage+"-selected-"+ids.replace(',','-')+".properties");
+        try(OutputStream out=Files.newOutputStream(file)){p.store(out,"Derivado por Manager: no modifica original ni autoriza publicacion");}
+        return file;
     }
     private void runB3Diagnostic() {
         if(busy)return;

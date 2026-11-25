@@ -1,0 +1,25 @@
+TotalCorner Manager v1.9.3 - Correccion A5.3 -> A6.1 con equipos parcialmente VERIFIED
+
+CASO CORREGIDO
+MLS Play-offs: LS=7, TC=596. A5.1 devuelve 38 identidades TC, 37 VERIFIED y 1 SIN_LINK_VERIFICADO (Dallas). A5.2 devuelve Dallas SIN_CANDIDATO_POR_PARTIDOS. Antes A6.1 se bloqueaba porque A5.3 solo dejaba reutilizar cuando TODOS estaban VERIFIED.
+
+NUEVO FLUJO
+1) Instalar v1.9.3 en totalcorner-manager (el downloader NO cambia).
+2) Reiniciar Manager; seleccionar LS=7 / TC=596.
+3) Ejecutar A5.1 de nuevo para refrescar tabla de equipos (SOLO LECTURA).
+4) Si A5.2 sigue confirmado en el panel y su CSV existe, NO repetir A5.2.
+5) En A5.3 pulsar "Continuar con 37 VERIFIED (1 pendientes, 0 INSERT)" y confirmar.
+6) Pasar a A6.1 y previsualizar enlaces de partidos (SOLO LECTURA).
+
+SEGURIDAD
+- El boton nuevo NO crea ningun enlace. Solo confirma los VERIFIED ya presentes en MySQL.
+- El equipo sin mapping sigue pendiente y no se trata como VERIFIED.
+- A6.1 y A6.2 verifican mapping de los equipos para cada candidato; inserciones de partidos siguen necesitando simulacion y confirmacion.
+- El panel general distingue reutilizacion parcial (sin mapping) de inserciones A5.3.
+- Sin cambios en tablas ls_, tc_, ni en codigo del downloader.
+
+INSTALACION
+Cerrar Manager; extraer ZIP en C:\Users\Javi\eclipse-workspace\, sobrescribir totalcorner-manager; Eclipse F5, Maven Update Project y Project Clean. Ejecutar TotalCornerManager.java. --version muestra 1.9.3.
+
+VERIFICACION LOCAL
+javac --release 8: OK. Prueba Swing 37 VERIFIED / 1 no verificado: OK. Self-tests A5/A6: OK. No conectamos a tu MySQL ni a la API.

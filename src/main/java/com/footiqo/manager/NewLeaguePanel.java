@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-/** Bloque 01, A1-A6.4: liga nueva, enlaces seguros y revision manual de partidos. */
+/** Bloque 01, A1-A7.2: liga nueva, enlaces y descarga historica de cuotas. */
 public final class NewLeaguePanel extends JPanel {
     private static final long serialVersionUID = 1L;
     private static final String VERIFY = "com.footiqo.totalcorner.TotalCornerLeagueIdVerifier";
@@ -26,6 +26,7 @@ public final class NewLeaguePanel extends JPanel {
     private static final String MATCHES_A61 = "com.footiqo.manager.A61MatchPreviewRunner";
     private static final String MATCHES_A62 = "com.footiqo.manager.A62MatchLinksRunner";
     private static final String MATCHES_A63 = "com.footiqo.manager.A63ManualMatchRunner";
+    private static final String ODDS_A71 = "com.footiqo.totalcorner.LeagueOddsBatchDownloader";
     private static final DateTimeFormatter TS = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmssSSS");
     private final Supplier<String> projectPath, java8Path;
     private final Supplier<Boolean> managerBusy;
@@ -36,6 +37,8 @@ public final class NewLeaguePanel extends JPanel {
     private final JTextField name = new JTextField("USA MLS", 23);
     private final JComboBox<String> savedLeagues = new JComboBox<String>();
     private final JButton saveLeague = new JButton("Guardar liga");
+    private final JButton toggleUpdates = new JButton("Activar para actualizaciones (B1-B4)");
+    private final JLabel associations = new JLabel("Asociaciones TC de esta liga: pendientes.");
     private final Map<String, String> savedLeagueKeys = new LinkedHashMap<String, String>();
     private final Properties leagueHistory = new Properties();
     private boolean rebuildingLeagues;
@@ -84,6 +87,7 @@ public final class NewLeaguePanel extends JPanel {
     };
     private final JTable a52Table = new JTable(a52TableModel);
     private final JButton loadA53 = new JButton("1. Cargar CSV A5.2");
+    private final JButton reuseA53 = new JButton("Continuar con equipos VERIFIED (0 INSERT)");
     private final JButton selectStrongA53 = new JButton("Solo candidatos con evidencia");
     private final JButton selectAliasA53 = new JButton("Anadir alias revisados");
     private final JButton clearA53 = new JButton("Desmarcar todos");
@@ -113,6 +117,7 @@ public final class NewLeaguePanel extends JPanel {
     };
     private final JTable a61Table = new JTable(a61TableModel);
     private final JButton previewA62=new JButton("1. Simular enlaces seguros A6.2");
+    private final JButton noSafeA62=new JButton("Confirmar A6.2 sin candidatos seguros (0 INSERT)");
     private final JButton executeA62=new JButton("2. Aplicar enlaces A6.2 (VERIFIED)");
     private final JLabel a62State=new JLabel("A6.2: requiere CSV A6.1 revisado.");
     private final JLabel a62Summary=new JLabel("A6.2 solo inserta LISTO_PARA_INSERTAR.");
@@ -126,7 +131,7 @@ public final class NewLeaguePanel extends JPanel {
     private final JTextField a63From=new JTextField("2015-01-01",10), a63To=new JTextField("2027-01-01",10);
     private final JSpinner a63Tolerance=new JSpinner(new SpinnerNumberModel(120,1,14400,5));
     private final JSpinner a63Max=new JSpinner(new SpinnerNumberModel(10,1,30,1));
-    private final JComboBox<String> a63Filter=new JComboBox<String>(new String[]{"TODOS","CANDIDATO","REVISAR_MAPPING","REVISAR_MARCADOR","AMBIGUO","SOLO_LS","SOLO_TC"});
+    private final JComboBox<String> a63Filter=new JComboBox<String>(new String[]{"TODOS","CANDIDATO","REVISAR_TC_SIN_FECHA","REVISAR_MAPPING","REVISAR_MARCADOR","AMBIGUO","SOLO_LS","SOLO_TC"});
     private final JLabel a63State=new JLabel("A6.3: pendiente de consultar los partidos no enlazados.");
     private final JLabel a63Summary=new JLabel("Footiqo es la referencia; el informe TC no implica que falten datos LS.");
     private final JLabel a63Path=new JLabel("CSV: pendiente.");
@@ -153,6 +158,61 @@ public final class NewLeaguePanel extends JPanel {
     private final JLabel a1State = new JLabel("A1: candidato web, pendiente de verificar API.");
     private final JLabel a2State = new JLabel("A2: bloqueado hasta verificar A1 por API.");
     private final JTextArea log = new JTextArea(15, 98);
+    private final JTextField a71MatchPk=new JTextField("", 12);
+    private final JButton previewA71=new JButton("1. Simular prueba A7.1 (0 API)"),
+                          executeA71=new JButton("2. Descargar 1 partido A7.1");
+    private final JLabel a71Status=new JLabel("A7.1: seleccionar TC actual. PK opcional (vacio = primer pendiente)."),
+                         a71Info=new JLabel("Dos endpoints por partido: multibookmaker y Bet365. Primero simular.");
+    private String a71PreviewSignature="";
+    private final JSpinner a72Newest=new JSpinner(new SpinnerNumberModel(2026,2010,2035,1));
+    private final JSpinner a72Oldest=new JSpinner(new SpinnerNumberModel(2014,2010,2035,1));
+    private final JSpinner a72MaxRequests=new JSpinner(new SpinnerNumberModel(10,1,10000,1));
+    private final JSpinner a72Hours=new JSpinner(new SpinnerNumberModel(1,1,24,1));
+    private final JButton previewA72=new JButton("1. Consultar pendientes / Simular A7.2 (0 API)"),
+                          executeA72=new JButton("2. Descargar lote A7.2");
+    private final JLabel a72Status=new JLabel("A7.2: lotes reanudables por competicion TC, de reciente a antigua."),
+                         a72Info=new JLabel("No modifica LS ni activa la publicacion comercial.");
+    private String a72PreviewSignature="";
+    private final javax.swing.table.DefaultTableModel a72ProgressModel=new javax.swing.table.DefaultTableModel(
+        new Object[]{"Liga TC", "Temporada (jul-jun)", "Elegibles", "Ejecutados (2 DONE)", "Pendientes"}, 0){
+        private static final long serialVersionUID=1L;
+        @Override public boolean isCellEditable(int r,int c){return false;}
+        @Override public Class<?> getColumnClass(int c){return c<=1?String.class:Integer.class;}
+    };
+    private final JTable a72ProgressTable=new JTable(a72ProgressModel);
+    private final JLabel a72ProgressTotal=new JLabel("TOTAL: pendiente de consultar (solo MySQL, sin API).");
+    private String a72ProgressKey="";
+    private String a72ProgressScope="";
+    private String a72WindowScope(){return key()+"|"+a72Newest.getValue()+"|"+a72Oldest.getValue();}
+    private static final java.util.regex.Pattern A72_COUNTS=java.util.regex.Pattern.compile(
+        "^CUOTAS\\s+(\\d{4}/\\d{4})\\s+.+?\\s+\\|\\s+elegibles=(\\d+)\\s+DONE=(\\d+)\\s+faltan=(\\d+).*$");
+    private static final class A72Progress{
+        final List<Object[]> rows=new ArrayList<Object[]>();
+        int eligible,complete,pending;
+        void accept(String line){
+            java.util.regex.Matcher m=A72_COUNTS.matcher(line.trim());
+            if(!m.matches())return;
+            int e=Integer.parseInt(m.group(2)),d=Integer.parseInt(m.group(3)),f=Integer.parseInt(m.group(4));
+            rows.add(new Object[]{m.group(1),Integer.valueOf(e),Integer.valueOf(d),Integer.valueOf(f)});
+            eligible+=e;complete+=d;pending+=f;
+        }
+    }
+    private void showA72Progress(A72Progress p,String league,String origin){
+        if(!league.equals(key()))return;
+        a72ProgressKey=league;
+        a72ProgressScope=a72WindowScope();
+        a72ProgressModel.setRowCount(0);
+        String selectedName=name.getText().trim()+" (TC="+tcId.getText().trim()+")";
+        for(Object[] row:p.rows)a72ProgressModel.addRow(new Object[]{selectedName,row[0],row[1],row[2],row[3]});
+        if(p.rows.isEmpty()){
+            a72ProgressTotal.setText("No se pudo obtener el recuento. Consulta el log A7.2.");
+        }else{
+            a72ProgressTotal.setText("TOTAL TC="+tcId.getText().trim()+" | Elegibles: "+p.eligible+
+                " | Completos: "+p.complete+" | PENDIENTES: "+p.pending+
+                " | "+origin+" (0 API)");
+        }
+    }
+
     private final JTabbedPane stages = new JTabbedPane(JTabbedPane.TOP, JTabbedPane.SCROLL_TAB_LAYOUT);
     private final Path saved = Paths.get(System.getProperty("user.home"), ".totalcorner-manager-new-league.properties");
     private String verifiedKey = "", pageDoneKey = "", verifiedAt = "", pageDoneAt = "";
@@ -181,8 +241,8 @@ public final class NewLeaguePanel extends JPanel {
         presets.add(new JLabel("Ligas guardadas:"));
         savedLeagues.setPreferredSize(new Dimension(450, 26));
         presets.add(savedLeagues);
-        presets.add(saveLeague);
-        top.add(presets);
+        presets.add(saveLeague);presets.add(toggleUpdates);
+        top.add(presets);top.add(associations);
         add(top, BorderLayout.NORTH);
 
         JPanel a1 = new JPanel(new BorderLayout(3, 3));
@@ -261,7 +321,7 @@ public final class NewLeaguePanel extends JPanel {
         a53Head.add(new JLabel("A5.3: seleccion por tipo Y por fila. Alias: varias identidades TC pueden corresponder al mismo equipo Footiqo."));
         a53Head.add(new JLabel("No se aplica nada sin simular y confirmar. El runner comprueba la evidencia actual y realiza transaccion o ROLLBACK."));
         JPanel a53Selection=new JPanel(new FlowLayout(FlowLayout.LEFT,6,4));
-        a53Selection.add(loadA53);a53Selection.add(selectStrongA53);a53Selection.add(selectAliasA53);a53Selection.add(clearA53);
+        a53Selection.add(loadA53);a53Selection.add(reuseA53);a53Selection.add(selectStrongA53);a53Selection.add(selectAliasA53);a53Selection.add(clearA53);
         a53Head.add(a53Selection);
         JPanel a53Actions=new JPanel(new FlowLayout(FlowLayout.LEFT,6,4));
         a53Actions.add(previewA53);a53Actions.add(executeA53);a53Head.add(a53Actions);
@@ -293,7 +353,7 @@ public final class NewLeaguePanel extends JPanel {
         a62Head.add(new JLabel("A6.2: solo candidatos SEGUROS de A6.1; equipos VERIFIED, horario, marcador y unicidad 1:1."));
         a62Head.add(new JLabel("La simulacion recalcula los candidatos en MySQL. No se ejecutan consultas API."));
         JPanel a62Actions=new JPanel(new FlowLayout(FlowLayout.LEFT,6,4));
-        a62Actions.add(previewA62);a62Actions.add(executeA62);a62Head.add(a62Actions);
+        a62Actions.add(previewA62);a62Actions.add(executeA62);a62Actions.add(noSafeA62);a62Head.add(a62Actions);
         a62Head.add(a62State);a62Head.add(a62Summary);
         a62.add(a62Head,BorderLayout.NORTH);
         a62.add(new JLabel("Partidos ambiguos, sin marcador coincidente o sin candidato: revisar en A6.3."),BorderLayout.CENTER);
@@ -302,7 +362,7 @@ public final class NewLeaguePanel extends JPanel {
         JPanel a63=new JPanel(new BorderLayout(5,5));
         JPanel a63Head=new JPanel();a63Head.setLayout(new BoxLayout(a63Head,BoxLayout.Y_AXIS));
         a63Head.add(new JLabel("A6.3 · Buscar pendientes en ambos sentidos. A6.4 · Enlazar SOLO las parejas revisadas y marcadas."));
-        a63Head.add(new JLabel("CANDIDATO: ambos equipos VERIFIED, mismo marcador y pareja unica 1:1. Otros tipos: revision manual obligatoria."));
+        a63Head.add(new JLabel("CANDIDATO: ambos equipos VERIFIED, mismo marcador y pareja unica 1:1. Sin fecha TC: revision individual obligatoria."));
         JPanel a63Options=new JPanel(new FlowLayout(FlowLayout.LEFT,5,3));
         a63Options.add(new JLabel("Desde Madrid:"));a63Options.add(a63From);
         a63Options.add(new JLabel("Hasta excl.:"));a63Options.add(a63To);
@@ -323,8 +383,53 @@ public final class NewLeaguePanel extends JPanel {
         a63Table.getColumnModel().getColumn(1).setPreferredWidth(95);
         a63Table.getColumnModel().getColumn(14).setPreferredWidth(240);
         a63Table.getColumnModel().getColumn(18).setPreferredWidth(270);
-        a63.add(ManagerUiSupport.withTotals(a63Table),BorderLayout.CENTER);
+        JTabbedPane manualA63=new JTabbedPane();
+        manualA63.addTab("Candidatos y seleccion por filas",ManagerUiSupport.withTotals(a63Table));
+        ManualMatchByIdsPanel directA64=new ManualMatchByIdsPanel(projectPath,java8Path,
+            () -> tcId.getText().trim(), managerBusy,setManagerBusy,() -> {
+                a63ConsultKey="";a63ConsultScope="";a63TableModel.setRowCount(0);
+                a63Fingerprints.clear();a64PreviewSignature="";
+                a63Summary.setText("Enlace directo aplicado: reconsultar A6.3 para recalcular los pendientes.");
+                recordConfirmation("a64",LocalDateTime.now().toString());
+                String prefix="league."+encode(key());leagueHistory.setProperty(prefix+".a64.count","1");
+                leagueHistory.setProperty(prefix+".a63.scope","");saveState();
+                note("A6.4: enlace manual por IDs confirmado; volver a consultar A6.3.");refresh();
+            });
+        manualA63.addTab("Enlace directo por IDs",directA64);
+        a63.add(manualA63,BorderLayout.CENTER);
         stages.addTab("A6.3–A6.4. Revisar y enlazar manual",a63);
+
+        JPanel a71=new JPanel(new BorderLayout(4,4));
+        JPanel a71Head=new JPanel();a71Head.setLayout(new BoxLayout(a71Head,BoxLayout.Y_AXIS));
+        a71Head.add(new JLabel("A7.1 · Prueba de un partido. Guarda 2 JSON originales y observaciones importadas. No modifica Footiqo."));
+        JPanel a71Inputs=new JPanel(new FlowLayout(FlowLayout.LEFT,6,4));
+        a71Inputs.add(new JLabel("TC match PK (opcional):"));a71Inputs.add(a71MatchPk);
+        a71Inputs.add(previewA71);a71Inputs.add(executeA71);a71Head.add(a71Inputs);
+        a71Head.add(a71Status);a71Head.add(a71Info);
+        a71.add(a71Head,BorderLayout.NORTH);
+        a71.add(new JLabel("Sin PK: toma el primer partido elegible de la competicion. Con PK: prueba solamente ese partido."),BorderLayout.CENTER);
+        stages.addTab("A7.1. Probar cuotas de 1 partido",a71);
+
+        JPanel a72=new JPanel(new BorderLayout(4,4));
+        JPanel a72Head=new JPanel();a72Head.setLayout(new BoxLayout(a72Head,BoxLayout.Y_AXIS));
+        a72Head.add(new JLabel("A7.2 · Solo la competicion TC seleccionada. Contadores por ventana anual, antes y despues de cada lote."));
+        JPanel a72Options=new JPanel(new FlowLayout(FlowLayout.LEFT,6,4));
+        a72Options.add(new JLabel("Ano mas reciente:"));a72Options.add(a72Newest);
+        a72Options.add(new JLabel("Ano mas antiguo:"));a72Options.add(a72Oldest);
+        a72Options.add(new JLabel("Max peticiones API:"));a72Options.add(a72MaxRequests);
+        a72Options.add(new JLabel("Horas max:"));a72Options.add(a72Hours);a72Head.add(a72Options);
+        JPanel a72Buttons=new JPanel(new FlowLayout(FlowLayout.LEFT,6,4));
+        a72Buttons.add(previewA72);a72Buttons.add(executeA72);a72Head.add(a72Buttons);
+        a72Head.add(a72Status);a72Head.add(a72Info);
+        a72.add(a72Head,BorderLayout.NORTH);
+        JPanel a72ProgressPanel=new JPanel(new BorderLayout(4,4));
+        a72ProgressTable.setFillsViewportHeight(true);
+        a72ProgressTable.setAutoCreateRowSorter(false);
+        a72ProgressPanel.add(new JScrollPane(a72ProgressTable),BorderLayout.CENTER);
+        a72ProgressPanel.add(a72ProgressTotal,BorderLayout.SOUTH);
+        a72.add(a72ProgressPanel,BorderLayout.CENTER);
+        a72.add(new JLabel("Cada ventana abarca 01/07 a 30/06 en UTC (no temporada oficial MLS). Los TC sin fecha se auditan en A7.3."),BorderLayout.SOUTH);
+        stages.addTab("A7.2. Historico cuotas por lotes",a72);
 
         JPanel center = new JPanel(new BorderLayout(4, 4));
         stages.setPreferredSize(new Dimension(900, 290));
@@ -336,7 +441,7 @@ public final class NewLeaguePanel extends JPanel {
         center.add(new JScrollPane(log), BorderLayout.CENTER);
         add(center, BorderLayout.CENTER);
         JPanel bottom = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        bottom.add(stop); bottom.add(new JLabel("El codigo de descarga existente no se modifica. La configuracion original de ligas tampoco."));
+        bottom.add(stop); bottom.add(new JLabel("No se altera el descargador existente ni las ligas comerciales. A7 consulta la API solo con --execute."));
         add(bottom, BorderLayout.SOUTH);
         simulateA1.addActionListener(e -> run("a1-simulate"));
         verifyA1.addActionListener(e -> run("a1-verify"));
@@ -345,11 +450,57 @@ public final class NewLeaguePanel extends JPanel {
         checkA3.addActionListener(e -> runA3("check"));
         simulateA3.addActionListener(e -> runA3("preview"));
         executeA3.addActionListener(e -> runA3("execute"));
+        previewA71.addActionListener(e -> runA71(false));
+        executeA71.addActionListener(e -> runA71(true));
+        previewA72.addActionListener(e -> runA72(false));
+        executeA72.addActionListener(e -> runA72(true));
+        a71MatchPk.getDocument().addDocumentListener(new javax.swing.event.DocumentListener(){
+            public void insertUpdate(javax.swing.event.DocumentEvent e){refresh();}
+            public void removeUpdate(javax.swing.event.DocumentEvent e){refresh();}
+            public void changedUpdate(javax.swing.event.DocumentEvent e){refresh();}
+        });
+        for(JSpinner sp:new JSpinner[]{a72Newest,a72Oldest,a72MaxRequests,a72Hours})sp.addChangeListener(e->refresh());
+
         consultA4.addActionListener(e -> runA4());
         confirmA4.addActionListener(e -> confirmA4());
         consultA51.addActionListener(e -> runA51());
+        noSafeA62.addActionListener(e -> {
+            if(!a61Checked()||!"0".equals(a61Count())||ownBusy||otherBusy)return;
+            if(JOptionPane.showConfirmDialog(this,"A6.1 confirma 0 candidatos seguros. No se insertan partidos.\n"
+                +"A6.3 permitira revisar los encuentros pendientes manualmente. ¿Confirmar A6.2 como sin trabajo?",
+                "A6.2 sin candidatos",JOptionPane.YES_NO_OPTION,JOptionPane.QUESTION_MESSAGE)!=JOptionPane.YES_OPTION)return;
+            recordConfirmation("a62",LocalDateTime.now().toString());
+            leagueHistory.setProperty("league."+encode(key())+".a62.count","0");saveState();
+            note("A6.2 CONFIRMADO SIN CANDIDATOS SEGUROS: 0 INSERT. Continuar A6.3.");refresh();
+        });
         consultA52.addActionListener(e -> runA52());
         loadA53.addActionListener(e -> loadA53());
+        reuseA53.addActionListener(e -> {
+            // Un equipo sin candidato en A5.2 no puede forzarnos a insertar un mapping inexistente.
+            // A6.1 solo utilizara los mappings VERIFIED existentes y mostrara lo demas como pendiente.
+            if(!a52Checked() || !key().equals(a51ConsultKey))return;
+            int[] counts=countA51Mappings(a51TableModel);
+            if(counts[0]==0)return;
+            String message="Equipos VERIFIED reutilizables: "+counts[0]+".\n"
+                +"Equipos TC SIN enlace VERIFIED: "+counts[1]+".\n\n"
+                +"Los no verificados seguiran pendientes y NO se enlazaran automaticamente.\n"
+                +"A6.1 utilizara exclusivamente mappings VERIFIED de MySQL.\n"
+                +"No se crearan enlaces nuevos ni se modificara ls_match.\n\n"
+                +"¿Confirmas que has revisado A5.2 y quieres continuar a A6.1?";
+            if(JOptionPane.showConfirmDialog(this,message,"A5.3: continuar con mappings existentes",
+                JOptionPane.YES_NO_OPTION,JOptionPane.WARNING_MESSAGE)!=JOptionPane.YES_OPTION)return;
+            String prefix="league."+encode(key());
+            recordConfirmation("a53",LocalDateTime.now().toString());
+            leagueHistory.setProperty(prefix+".a53.count","0");
+            leagueHistory.setProperty(prefix+".a53.mode","REUSE");
+            leagueHistory.setProperty(prefix+".a53.reused",Integer.toString(counts[0]));
+            leagueHistory.setProperty(prefix+".a53.unmapped",Integer.toString(counts[1]));
+            saveState();
+            a53Summary.setText("Reutilizados VERIFIED="+counts[0]+" | Sin enlace="+counts[1]+" | INSERT=0. Continuar A6.1.");
+            note("A5.3 CONFIRMADO: "+counts[0]+" mappings VERIFIED reutilizados | "+counts[1]+
+                 " sin mapping | INSERT=0. Siguiente A6.1.");
+            refresh();
+        });
         selectStrongA53.addActionListener(e -> selectA53("CANDIDATO_CON_EVIDENCIA",false));
         selectAliasA53.addActionListener(e -> {
             if(JOptionPane.showConfirmDialog(this,"Los alias permiten VINCULAR varios IDs TC con un mismo equipo LS.\n"
@@ -383,8 +534,36 @@ public final class NewLeaguePanel extends JPanel {
             leagueHistory.setProperty(id+".ls",lsId.getText().trim());
             leagueHistory.setProperty(id+".tc",tcId.getText().trim());
             leagueHistory.setProperty(id+".name",name.getText().trim());
+            try {
+                LeagueMappingRegistry.Association current=LeagueMappingRegistry.load().get(tcId.getText().trim());
+                LeagueMappingRegistry.save(tcId.getText().trim(),lsId.getText().trim(),name.getText().trim(),
+                    current!=null && current.updates);
+            } catch(Exception ex) {
+                note("ERROR MAPPING: "+ex.getMessage());
+                JOptionPane.showMessageDialog(this,ex.getMessage(),"LS -> TC",JOptionPane.ERROR_MESSAGE);
+                return;
+            }
             rebuildSavedLeagues();saveState();
-            note("Liga guardada sin confirmar API: "+leagueLabel());
+            note("Liga asociada al registro compartido, sin publicar: "+leagueLabel());
+        });
+        toggleUpdates.addActionListener(e -> {
+            if(ownBusy||otherBusy)return;
+            try {
+                String tc=tcId.getText().trim(),ls=lsId.getText().trim();
+                LeagueMappingRegistry.Association current=LeagueMappingRegistry.load().get(tc);
+                if(current==null||!current.lsId.equals(ls))throw new IOException("Primero guarda esta asociacion LS / TC.");
+                boolean enable=!current.updates;
+                if(enable&&!a3Confirmed())throw new IOException("Para activar TC="+tc+" en B1-B4, completa primero A1-A3.");
+                String message=(enable?"ACTIVAR":"DESACTIVAR")+" TC="+tc+" para las actualizaciones de B1-B4.\n"
+                    +"LS="+ls+" mantiene sus enlaces. Esto NO incluye la liga en los ZIP comerciales.\n"
+                    +"No modifica el fichero totalcorner-history.properties. ¿Continuar?";
+                if(JOptionPane.showConfirmDialog(this,message,"Actualizaciones (sin publicar)",JOptionPane.YES_NO_OPTION,
+                        JOptionPane.WARNING_MESSAGE)!=JOptionPane.YES_OPTION)return;
+                LeagueMappingRegistry.save(tc,ls,name.getText().trim(),enable);
+                note("Asociacion LS="+ls+" TC="+tc+" actualizaciones="+enable+". Recarga ligas en Bloque 2.");
+                if(onStateChanged!=null)onStateChanged.run();
+                refresh();
+            }catch(Exception ex){JOptionPane.showMessageDialog(this,ex.getMessage(),"Actualizar asociacion",JOptionPane.ERROR_MESSAGE);}
         });
         stop.addActionListener(e -> {
             Process p=process;
@@ -420,7 +599,17 @@ public final class NewLeaguePanel extends JPanel {
                 if(fieldsForLeague.length==3){lsId.setText(fieldsForLeague[0]);tcId.setText(fieldsForLeague[1]);name.setText(fieldsForLeague[2]);restorePersistedScopes();}
             }
         });
-        loadState(); rebuildSavedLeagues(); refresh();
+        loadState();
+        // Migrar asociaciones previas sin alterar los avances A1-A6 existentes.
+        for(String prop:leagueHistory.stringPropertyNames())if(prop.endsWith(".ls")){
+            String prefix=prop.substring(0,prop.length()-3);
+            String oldLs=leagueHistory.getProperty(prefix+".ls",""),oldTc=leagueHistory.getProperty(prefix+".tc",""),oldName=leagueHistory.getProperty(prefix+".name","");
+            try {
+                if(!oldLs.isEmpty()&&!oldTc.isEmpty()&&!oldName.isEmpty() && !LeagueMappingRegistry.load().containsKey(oldTc))
+                    LeagueMappingRegistry.save(oldTc,oldLs,oldName,false);
+            }catch(Exception ex){note("Revisar migracion LS/TC: "+ex.getMessage());}
+        }
+        rebuildSavedLeagues(); refresh();
     }
     public void selectStage(int index) { stages.setSelectedIndex(Math.max(0, Math.min(stages.getTabCount()-1,index))); }
     public String leagueLabel() { return "LS="+lsId.getText().trim()+" / TC="+tcId.getText().trim()+" / "+name.getText().trim(); }
@@ -430,6 +619,11 @@ public final class NewLeaguePanel extends JPanel {
     public String a2When(){return leagueHistory.getProperty("league."+encode(key())+".a2", "");}
     public String a3When(){return leagueHistory.getProperty("league."+encode(key())+".a3", "");}
     public boolean a3Confirmed(){return a2Confirmed() && !a3When().isEmpty();}
+    public String a71When(){return leagueHistory.getProperty("league."+encode(key())+".a71", "");}
+    public String a72LastRun(){return leagueHistory.getProperty("league."+encode(key())+".a72.last-run", "");}
+    private String a71Signature(){return key()+"|"+a71MatchPk.getText().trim();}
+    private String a72Signature(){return key()+"|"+a72Newest.getValue()+"|"+a72Oldest.getValue()+"|"+
+        a72MaxRequests.getValue()+"|"+a72Hours.getValue();}
     public String a4When(){return leagueHistory.getProperty("league."+encode(key())+".a4", "");}
     public boolean a4Confirmed(){return a3Confirmed() && !a4When().isEmpty();}
     public String a51When(){return leagueHistory.getProperty("league."+encode(key())+".a51", "");}
@@ -445,7 +639,20 @@ public final class NewLeaguePanel extends JPanel {
     }
     public String a53When(){return leagueHistory.getProperty("league."+encode(key())+".a53", "");}
     public String a53Count(){return leagueHistory.getProperty("league."+encode(key())+".a53.count", "");}
+    public String a53Mode(){return leagueHistory.getProperty("league."+encode(key())+".a53.mode", "INSERT");}
+    public String a53ReusedCount(){return leagueHistory.getProperty("league."+encode(key())+".a53.reused", "");}
+    public String a53UnmappedCount(){return leagueHistory.getProperty("league."+encode(key())+".a53.unmapped", "");}
     public boolean a53Applied(){return a52Checked() && !a53When().isEmpty();}
+    /** Reutilizacion parcial: A5.1 siempre consulta mappings de la competicion TC seleccionada.
+     * El metodo es SOLO lectura sobre una tabla local; no inserta ni infiere correspondencias. */
+    static int[] countA51Mappings(javax.swing.table.TableModel rows){
+        int verified=0,missing=0;
+        for(int i=0;i<rows.getRowCount();i++){
+            if("VERIFIED".equals(String.valueOf(rows.getValueAt(i,3))))verified++;
+            else missing++;
+        }
+        return new int[]{verified,missing};
+    }
     private String a61Scope(){return a61From.getText().trim()+"|"+a61To.getText().trim()+"|"+a61Tolerance.getValue();}
     public String a61When(){return leagueHistory.getProperty("league."+encode(key())+".a61","");}
     public String a61Csv(){return leagueHistory.getProperty("league."+encode(key())+".a61.csv","");}
@@ -480,6 +687,7 @@ public final class NewLeaguePanel extends JPanel {
     private void selectA63(boolean onlySafe){
         if(!a63Table.isEnabled())return;
         int minutes=((Number)a63SelectMinutes.getValue()).intValue();
+        // Sin fecha TC: no hay tolerancia en minutos verificable. Exigir seleccionar la casilla individual.
         List<Integer> eligible=new ArrayList<Integer>();
         Map<String,Integer> lsCounts=new HashMap<String,Integer>(),tcCounts=new HashMap<String,Integer>();
         for(int view=0;view<a63Table.getRowCount();view++){
@@ -578,9 +786,24 @@ public final class NewLeaguePanel extends JPanel {
         }finally{rebuildingLeagues=false;}
     }
     private void refresh(){
+        if(!a72ProgressScope.isEmpty()&&!a72ProgressScope.equals(a72WindowScope())){
+            a72ProgressKey="";
+            a72ProgressScope="";
+            a72ProgressModel.setRowCount(0);
+            a72ProgressTotal.setText("TOTAL: selecciona consultar pendientes para esta competicion (0 API).");
+        }
         boolean ready=!ownBusy&&!otherBusy;
         boolean verified=a1Verified(), done=a2Confirmed();
         simulateA1.setEnabled(ready); verifyA1.setEnabled(ready);saveLeague.setEnabled(ready);
+        toggleUpdates.setEnabled(ready);
+        try {
+            LeagueMappingRegistry.Association active=LeagueMappingRegistry.load().get(tcId.getText().trim());
+            toggleUpdates.setText(active!=null&&active.updates?"Desactivar actualizaciones B1-B4":"Activar actualizaciones B1-B4");
+            StringJoiner tcList=new StringJoiner("  |  ");
+            for(LeagueMappingRegistry.Association a:LeagueMappingRegistry.load().values())
+                if(a.lsId.equals(lsId.getText().trim()))tcList.add("TC "+a.tcId+" "+a.name+" ["+(a.updates?"Actualiza":"Sin activar")+"]");
+            associations.setText("LS "+lsId.getText().trim()+" => "+(tcList.length()>0?tcList.toString():"Sin asociaciones guardadas"));
+        }catch(Exception ex){associations.setText("Error de asociaciones: "+ex.getMessage());}
         simulateA2.setEnabled(ready&&verified); executeA2.setEnabled(ready&&verified&&!done);
         boolean a3done=a3Confirmed();
         checkA3.setEnabled(ready&&done);simulateA3.setEnabled(ready&&done);
@@ -592,6 +815,13 @@ public final class NewLeaguePanel extends JPanel {
         a52From.setEnabled(ready);a52To.setEnabled(ready);a52Tolerance.setEnabled(ready);
         boolean a53Ready=ready && a52Checked() && key().equals(a53LoadedKey) && a52Csv().equals(a53LoadedCsv) && a52Scope().equals(a53LoadedScope);
         loadA53.setEnabled(ready && a52Checked());
+        // Se admite confirmar la reutilizacion PARCIAL: un equipo sin candidato
+        // en A5.2 no puede bloquear el diagnostico de partidos A6.1.
+        boolean canReuse=ready&&a52Checked()&&key().equals(a51ConsultKey);
+        int[] mapped=countA51Mappings(a51TableModel);
+        canReuse=canReuse && mapped[0]>0;
+        reuseA53.setEnabled(canReuse);
+        reuseA53.setText("Continuar con "+mapped[0]+" VERIFIED ("+mapped[1]+" pendientes, 0 INSERT)");
         selectStrongA53.setEnabled(a53Ready);selectAliasA53.setEnabled(a53Ready);clearA53.setEnabled(a53Ready);
         a53Table.setEnabled(a53Ready);
         previewA53.setEnabled(a53Ready&&a53SelectedCount()>0);
@@ -599,6 +829,7 @@ public final class NewLeaguePanel extends JPanel {
         previewA61.setEnabled(ready && a53Applied());
         boolean a62Ready=ready && a61Checked() && a61Count().matches("[0-9]+") &&
             Integer.parseInt(a61Count())>0 && ((Number)a61Tolerance.getValue()).intValue()<=15;
+        noSafeA62.setEnabled(ready&&a61Checked()&&"0".equals(a61Count())&&!a62Applied());
         previewA62.setEnabled(a62Ready);
         executeA62.setEnabled(a62Ready && !a62PreviewSignature.isEmpty() && a62PreviewSignature.equals(a62Signature()));
         a62State.setText(a62Applied()?"A6.2: ultimo lote VERIFIED: "+a62When()+" | "+a62Count()+" partidos":
@@ -625,15 +856,17 @@ public final class NewLeaguePanel extends JPanel {
         }
 
         a61State.setText(a61Checked()?"A6.1 CSV CONFIRMADO: "+a61When():
-             a53Applied()?"A6.1 PENDIENTE: consultar partidos y revisar CSV antes de A6.2.":
-             "A6.1 BLOQUEADO: aplicar antes los equipos revisados de A5.3.");
+             a53Applied()?"A6.1 PENDIENTE: consultar partidos y revisar CSV (solo equipos VERIFIED).":
+             "A6.1 BLOQUEADO: en A5.3 confirma los mappings existentes o aplica enlaces revisados.");
         a61Path.setText(a61Checked()?"CSV: "+a61Csv():"CSV: pendiente para los filtros actuales.");
         if(!a61ConsultKey.isEmpty()&&(!key().equals(a61ConsultKey)||!a61Scope().equals(a61ConsultScope))){
             a61ConsultKey="";a61ConsultScope="";a61TableModel.setRowCount(0);a61Summary.setText("Sin consulta A6.1 para esta liga.");
         }
 
-        a53State.setText(a53Applied()?"A5.3: ultimo lote aplicado "+a53When()+" | "+a53Count()+" enlaces VERIFIED":
-            a52Checked()?"A5.3: cargar CSV, seleccionar filas y simular antes de aplicar.":
+        a53State.setText(a53Applied()?("REUSE".equals(a53Mode())?
+            "A5.3: "+a53ReusedCount()+" VERIFIED reutilizados | "+a53UnmappedCount()+" sin mapping | 0 INSERT":
+            "A5.3: ultimo lote aplicado "+a53When()+" | "+a53Count()+" enlaces VERIFIED"):
+            a52Checked()?"A5.3: aplicar candidatos revisados o continuar con equipos VERIFIED existentes.":
             "A5.3: bloqueado hasta completar A5.2.");
         confirmA4.setEnabled(ready&&a3done&&!a4Confirmed()&&a4ConsultOk&&key().equals(a4ConsultKey));
         if(!a4ConsultKey.isEmpty() && !key().equals(a4ConsultKey)) {
@@ -691,6 +924,10 @@ public final class NewLeaguePanel extends JPanel {
         ManagerUiSupport.gate(consultA51,ready&&a4Confirmed(),!ready?activity:"Falta confirmar A4.");
         ManagerUiSupport.gate(consultA52,ready&&a51Checked(),!ready?activity:"Falta consultar mappings A5.1.");
         ManagerUiSupport.gate(loadA53,ready&&a52Checked(),!ready?activity:"Falta generar el CSV A5.2.");
+        ManagerUiSupport.gate(reuseA53,canReuse,!ready?activity:
+            !a52Checked()?"Falta generar y revisar el CSV A5.2.":
+            !key().equals(a51ConsultKey)?"Consulta A5.1 para la competicion actual.":
+            "No existen mappings VERIFIED para reutilizar; revisa A5.2.");
         ManagerUiSupport.gate(previewA53,a53Ready&&a53SelectedCount()>0,!ready?activity:
                 !a53Ready?"Falta cargar un CSV A5.2 valido para la liga y filtros actuales.":
                 "Selecciona al menos una correspondencia de equipo.");
@@ -706,11 +943,27 @@ public final class NewLeaguePanel extends JPanel {
         ManagerUiSupport.gate(reportA63,reportA63.isEnabled(),!ready?activity:"Completar A6.2 antes de revisar pendientes.");
         ManagerUiSupport.gate(previewA64,previewA64.isEnabled(),!ready?activity:!a63Checked()?"Consultar A6.3 con los parametros actuales.":"Marca al menos una pareja para revisar.");
         ManagerUiSupport.gate(executeA64,executeA64.isEnabled(),!ready?activity:!a63Checked()?"Consultar A6.3.":"Falta simulacion valida con la seleccion actual.");
+        boolean a7Ready=ready&&a3Confirmed()&&a62Applied();
+        String a71Reason=!ready?activity:!a3Confirmed()?"Primero completa A3 para esta competicion TC.":
+            !a62Applied()?"Primero verifica y enlaza partidos en A6.":"Simula la misma prueba A7.1 antes de descargar.";
+        ManagerUiSupport.gate(previewA71,a7Ready,a71Reason);
+        ManagerUiSupport.gate(executeA71,a7Ready&&a71PreviewSignature.equals(a71Signature()),a71Reason);
+        ManagerUiSupport.gate(previewA72,a7Ready&&!a71When().isEmpty(),!a7Ready?a71Reason:"Primero confirma la prueba A7.1.");
+        ManagerUiSupport.gate(executeA72,previewA72.isEnabled()&&a72PreviewSignature.equals(a72Signature()),
+            "Primero simula A7.2 con los mismos limites de anos, peticiones y horas.");
+        a71MatchPk.setEnabled(ready);
+        for(JSpinner sp:new JSpinner[]{a72Newest,a72Oldest,a72MaxRequests,a72Hours})sp.setEnabled(ready);
+        a71Status.setText(!a71When().isEmpty()?"A7.1 prueba con 2 endpoints confirmada: "+a71When():
+            "A7.1 pendiente: primero simular un partido de TC="+tcId.getText().trim());
+        a72Status.setText(a72LastRun().isEmpty()?"A7.2: liga activa "+name.getText().trim()+" (TC="+tcId.getText().trim()+"); consultar pendientes.":
+            "A7.2: TC="+tcId.getText().trim()+" | ultimo lote "+a72LastRun()+". Auditar en A7.3.");
         ManagerUiSupport.gate(stop,ownBusy,"No hay un proceso del Bloque 01 en curso.");
         lsId.setEditable(ready);tcId.setEditable(ready);name.setEditable(ready);
         a1State.setText(verified?"A1 VERIFICADO por API: "+a1When():"A1 PENDIENTE: TC="+tcId.getText().trim()+" sin confirmar mediante API.");
         a2State.setText(done?"A2 CONFIRMADO (pagina 1 DONE): "+a2When():(verified?"A2 PENDIENTE: primero simular y luego confirmar pagina 1.":"A2 BLOQUEADO: verificar A1 antes."));
-        if(onStateChanged!=null)onStateChanged.run();
+        // No avisar cambios de asociaciones por refrescos visuales (busy/seleccion/estado).
+        // La notificacion al Bloque 2 se emite solo cuando cambia una asociacion,
+        // como en toggleUpdates. De lo contrario, loadLeagues() borra B1.1.
     }
     private void loadState(){
         try{if(!Files.isRegularFile(saved))return;Properties p=new Properties();
@@ -1420,6 +1673,8 @@ public final class NewLeaguePanel extends JPanel {
                         a53PreviewSignature="";recordConfirmation("a53",LocalDateTime.now().toString());
                         String prefix="league."+encode(signature);
                         leagueHistory.setProperty(prefix+".a53.count",result.applied[1]);
+                        leagueHistory.setProperty(prefix+".a53.mode","INSERT");
+                        leagueHistory.remove(prefix+".a53.reused");leagueHistory.remove(prefix+".a53.unmapped");
                         leagueHistory.setProperty(prefix+".a53.audit",result.audit==null?"":result.audit);saveState();
                         a53Summary.setText("APLICADOS="+result.applied[1]+" | alias="+result.applied[3]+" | Informe: "+result.audit);
                         note("== A5.3 ENLACES VERIFIED CONFIRMADOS: "+result.applied[1]+" ==");
@@ -1672,15 +1927,18 @@ public final class NewLeaguePanel extends JPanel {
             if(!a63Checked()||stamp.isEmpty())throw new IOException("Reconsulta A6.3 con los filtros actuales.");
             if(expected<=0)throw new IOException("Selecciona al menos una pareja para revisar.");
             if(apply&&!stamp.equals(a64PreviewSignature))throw new IOException("Simula A6.4 con la seleccion actual antes de aplicar.");
-            Set<String> ls=new HashSet<String>(),tc=new HashSet<String>();int weak=0;
+            Set<String> ls=new HashSet<String>(),tc=new HashSet<String>();int weak=0,withoutDate=0;
             for(int i=0;i<a63TableModel.getRowCount();i++)if(Boolean.TRUE.equals(a63TableModel.getValueAt(i,0))){
                 String l=a63TableModel.getValueAt(i,2).toString(),t=a63TableModel.getValueAt(i,3).toString();
                 if(!ls.add(l)||!tc.add(t))throw new IOException("Has marcado varias parejas para un mismo partido LS o TC; desmarca las alternativas.");
                 if(!"CANDIDATO".equals(a63TableModel.getValueAt(i,1)))weak++;
+                if("REVISAR_TC_SIN_FECHA".equals(a63TableModel.getValueAt(i,1)))withoutDate++;
             }
             if(apply){
                 if(JOptionPane.showConfirmDialog(this,"Se van a insertar "+expected+" enlaces VERIFIED manuales de "+league+".\n"
-                    +"Parejas en estado REVISAR/AMBIGUO: "+weak+". Se permiten diferencias de marcador, nombres o fecha.\n"
+                    +"Parejas en estado REVISAR/AMBIGUO: "+weak+"; SIN FECHA TC: "+withoutDate+".\n"
+                    +(withoutDate>0?"ATENCION: no es posible verificar temporada ni dia con TC; solo equipos y marcador.\n":"")
+                    +"Se permiten diferencias de marcador, nombres o fecha en otros pares revisados.\n"
                     +"Has revisado personalmente cada pareja seleccionada, fecha, equipos y fase de competicion?\n"
                     +"Una transaccion cancelara TODO si encuentra duplicados o conflictos.","A6.4 · Confirmacion manual",
                     JOptionPane.YES_NO_OPTION,JOptionPane.WARNING_MESSAGE)!=JOptionPane.YES_OPTION)return;
@@ -1750,6 +2008,189 @@ public final class NewLeaguePanel extends JPanel {
             }
         }.execute();
     }
+    /** A7.1: una sola prueba de cuotas sin repetir los trabajos DONE validos. */
+    private void runA71(final boolean apply){
+        if(ownBusy||managerBusy.get())return;
+        final String league=key(),scope=a71Signature();
+        final Path dir;final java.util.List<String> cmd=new ArrayList<String>();
+        try{
+            if(!a3Confirmed()||!a62Applied())throw new IOException("A7.1 requiere A3 y A6 completados para esta competicion.");
+            if(apply&&!scope.equals(a71PreviewSignature))throw new IOException("Primero simula A7.1 con este mismo TC match PK.");
+            String pk=a71MatchPk.getText().trim();
+            if(!pk.isEmpty()&&!pk.matches("[0-9]{1,18}"))throw new IOException("TC match PK debe ser numerico, o dejalo vacio para seleccionar un pendiente.");
+            dir=Paths.get(projectPath.get().trim()).toAbsolutePath().normalize();
+            Path java=Paths.get(java8Path.get().trim()).toAbsolutePath().normalize();
+            TotalCornerManager.verifyJava8(java);
+            if(!Files.isRegularFile(dir.resolve("target/classes/com/footiqo/totalcorner/LeagueOddsBatchDownloader.class")))
+                throw new IOException("Falta LeagueOddsBatchDownloader.class: compila totalcorner-downloader.");
+            if(System.getenv("TOTALCORNER_DB_PASSWORD")==null)throw new IOException("Falta TOTALCORNER_DB_PASSWORD en Manager.");
+            if(apply&&(System.getenv("TOTALCORNER_API_TOKEN")==null||System.getenv("TOTALCORNER_API_TOKEN").isEmpty()))
+                throw new IOException("Falta TOTALCORNER_API_TOKEN en Manager.");
+            Collections.addAll(cmd,java.toString(),"-Dfile.encoding=UTF-8","-cp",TotalCornerManager.buildClasspath(dir),ODDS_A71,
+                "--league="+tcId.getText().trim(),"--limit=1");
+            if(!pk.isEmpty())cmd.add("--match-pk="+pk);
+            if(apply){
+                if(JOptionPane.showConfirmDialog(this,"A7.1 realizara hasta 2 peticiones de cuotas para TC="+tcId.getText().trim()+
+                    ".\nLas respuestas originales y las cuotas se conservaran en MySQL y .json.gz.\n"
+                    +"Los trabajos DONE validos se omiten. ¿Descargar?","A7.1 prueba real",
+                    JOptionPane.YES_NO_OPTION,JOptionPane.WARNING_MESSAGE)!=JOptionPane.YES_OPTION)return;
+                cmd.add("--execute");
+            }
+        }catch(Exception ex){JOptionPane.showMessageDialog(this,ex.getMessage(),"A7.1",JOptionPane.ERROR_MESSAGE);return;}
+        ownBusy=true;cancelled=false;setManagerBusy.accept(true);refresh();
+        note("=== A7.1 "+(apply?"EJECUTAR":"SIMULAR")+" | "+league+" | match-pk="+a71MatchPk.getText().trim()+" ===");
+        new SwingWorker<String,String>(){
+            @Override protected String doInBackground(){
+                Path file=dir.resolve("target/totalcorner-manager-logs/A-a71-"+(apply?"execute-":"simulate-")+TS.format(LocalDateTime.now())+".log");
+                boolean selected=false,simulation=false,error=false;int readySources=0,exit=-1;
+                try{
+                    Files.createDirectories(file.getParent());publish("Log: "+file);
+                    ProcessBuilder pb=new ProcessBuilder(cmd);pb.directory(dir.toFile());pb.redirectErrorStream(true);process=pb.start();
+                    try(BufferedReader r=new BufferedReader(new InputStreamReader(process.getInputStream(),StandardCharsets.UTF_8));
+                        BufferedWriter w=Files.newBufferedWriter(file,StandardCharsets.UTF_8)){
+                        String line;
+                        while((line=r.readLine())!=null){
+                            publish(line);w.write(line);w.newLine();
+                            if(line.trim().equals("Partidos elegibles en este lote: 1"))selected=true;
+                            if(line.contains("SIMULACION terminada"))simulation=true;
+                            if(line.contains("OK DONE (COMMIT)")||line.contains("OMITIDO (DONE y JSON valido ya registrado)"))readySources++;
+                            if(line.contains("ERROR:")||line.contains("IMPORT_OR_NETWORK_ERROR")||line.contains("RETRY")||line.contains("HTTP 429")||line.contains("HTTP_4")||line.contains("HTTP_5")||line.contains("El GZIP se guarda"))error=true;
+                        }
+                    }
+                    exit=process.waitFor();
+                }catch(Exception ex){return "ERROR A7.1: "+ex.getClass().getSimpleName()+": "+ex.getMessage();}
+                if(cancelled)return "ERROR A7.1: DETENIDO";
+                if(exit!=0||error)return "ERROR A7.1: revisar log. Codigo="+exit;
+                if(!selected)return "A7.1_SIN_ELEGIBLES: no hay trabajos disponibles en TC seleccionado (o PK fuera de alcance).";
+                if(!apply)return simulation?"A7.1_SIMULACION_OK":"ERROR A7.1: simulacion sin resultado confirmado";
+                return readySources>=2?"A7.1_DOS_ENDPOINTS_CONFIRMADOS":"ERROR A7.1: no se confirmaron los dos endpoints DONE con JSON valido.";
+            }
+            @Override protected void process(List<String> messages){for(String m:messages)note(m);}
+            @Override protected void done(){
+                String result;try{result=get();}catch(Exception ex){result="ERROR A7.1: "+ex.getMessage();}
+                note("== "+result+" ==");
+                if(league.equals(key())){
+                    if("A7.1_SIMULACION_OK".equals(result))a71PreviewSignature=scope;
+                    else if("A7.1_DOS_ENDPOINTS_CONFIRMADOS".equals(result)){
+                        recordConfirmation("a71",LocalDateTime.now().toString());a71PreviewSignature="";
+                    }
+                    else a71PreviewSignature="";
+                }
+                process=null;ownBusy=false;setManagerBusy.accept(false);refresh();
+            }
+        }.execute();
+    }
+
+    /** A7.2: historico reanudable, nunca descarga paginas A3. */
+    private void runA72(final boolean apply){
+        if(ownBusy||managerBusy.get())return;
+        final String league=key(),scope=a72Signature();final Path dir;
+        final java.util.List<String> cmd=new ArrayList<String>();
+        try{
+            if(a71When().isEmpty())throw new IOException("Primero confirma prueba real A7.1.");
+            if(apply&&!scope.equals(a72PreviewSignature))throw new IOException("Simula A7.2 con los mismos parametros antes de ejecutar.");
+            int newest=((Number)a72Newest.getValue()).intValue(),oldest=((Number)a72Oldest.getValue()).intValue();
+            if(newest<oldest)throw new IOException("Ano reciente debe ser >= ano antiguo.");
+            dir=Paths.get(projectPath.get().trim()).toAbsolutePath().normalize();
+            Path java=Paths.get(java8Path.get().trim()).toAbsolutePath().normalize();TotalCornerManager.verifyJava8(java);
+            if(!Files.isRegularFile(dir.resolve("target/classes/com/footiqo/totalcorner/HistoricalDownloadRunner.class")))
+                throw new IOException("Falta HistoricalDownloadRunner.class. Compila el downloader.");
+            if(System.getenv("TOTALCORNER_DB_PASSWORD")==null)throw new IOException("Falta TOTALCORNER_DB_PASSWORD en Manager.");
+            if(apply&&(System.getenv("TOTALCORNER_API_TOKEN")==null||System.getenv("TOTALCORNER_API_TOKEN").isEmpty()))
+                throw new IOException("Falta TOTALCORNER_API_TOKEN.");
+            Path config=a3Config(dir,tcId.getText().trim(),name.getText().trim());
+            Collections.addAll(cmd,java.toString(),"-Dfile.encoding=UTF-8","-cp",TotalCornerManager.buildClasspath(dir),DISCOVERY,
+                "--config="+config.toString(),"--phase=odds", "--newest-year="+newest,"--oldest-year="+oldest,
+                "--odds-batch=5","--max-requests="+a72MaxRequests.getValue(),"--max-hours="+a72Hours.getValue());
+            if(apply){
+                if(JOptionPane.showConfirmDialog(this,"A7.2: TC="+tcId.getText().trim()+"; hasta "+a72MaxRequests.getValue()+
+                    " solicitudes API.\nReanudable: omite jobs DONE validos y conserva JSON originales.\n"
+                    +"No modifica ls_match ni publica datasets. ¿Iniciar lote?","A7.2 · Descargar cuotas",
+                    JOptionPane.YES_NO_OPTION,JOptionPane.WARNING_MESSAGE)!=JOptionPane.YES_OPTION)return;
+                cmd.add("--execute");
+            }
+        }catch(Exception ex){JOptionPane.showMessageDialog(this,ex.getMessage(),"A7.2",JOptionPane.ERROR_MESSAGE);return;}
+        ownBusy=true;cancelled=false;setManagerBusy.accept(true);refresh();
+        note("=== A7.2 "+(apply?"LOTE":"SIMULACION")+" | "+league+" ===");
+        new SwingWorker<String,String>(){
+            private final A72Progress progress=new A72Progress();
+            private boolean progressUpdated=false;
+            private String progressIssue="";
+            @Override protected String doInBackground(){
+                Path file=dir.resolve("target/totalcorner-manager-logs/A-a72-"+(apply?"execute-":"simulate-")+TS.format(LocalDateTime.now())+".log");
+                boolean preview=false,finished=false,error=false;int exit=-1;
+                try{
+                    Files.createDirectories(file.getParent());publish("Log: "+file);
+                    ProcessBuilder pb=new ProcessBuilder(cmd);pb.directory(dir.toFile());pb.redirectErrorStream(true);process=pb.start();
+                    try(BufferedReader r=new BufferedReader(new InputStreamReader(process.getInputStream(),StandardCharsets.UTF_8));
+                        BufferedWriter w=Files.newBufferedWriter(file,StandardCharsets.UTF_8)){
+                        String line;
+                        while((line=r.readLine())!=null){
+                            publish(line);w.write(line);w.newLine();
+                            if(!apply)progress.accept(line);
+                            if(line.contains("SIMULACION COMPLETADA | HTTP=0 | SQL=SOLO LECTURA"))preview=true;
+                            if(line.startsWith("FIN HISTORICAL |"))finished=true;
+                            if(line.contains("ERROR SQL")||line.contains("ERROR HISTORICAL")||line.contains("BLOQUEO:")||line.contains("HTTP 429")||line.contains("Faltan TOTALCORNER_"))error=true;
+                        }
+                    }
+                    exit=process.waitFor();
+                }catch(Exception ex){return "ERROR A7.2: "+ex.getClass().getSimpleName()+": "+ex.getMessage();}
+                if(cancelled)return "ERROR A7.2: interrumpido. Los jobs DONE persisten.";
+                if(exit!=0||error)return "ERROR A7.2: revisar log del lote.";
+                if(!apply){
+                    progressUpdated=preview&&!progress.rows.isEmpty();
+                    return preview?"A7.2_SIMULACION_OK":"ERROR A7.2: simulacion incompleta";
+                }
+                if(!finished)return "ERROR A7.2: no aparece FIN HISTORICAL; revisar log";
+                // Nueva lectura de estado al finalizar el lote. No pasa --execute: API=0 y SQL=SELECT.
+                java.util.List<String> statusCmd=new ArrayList<String>(cmd);
+                statusCmd.remove("--execute");
+                publish("=== A7.2 ESTADO TRAS LOTE | MySQL SOLO LECTURA | API=0 ===");
+                try{
+                    ProcessBuilder statusPb=new ProcessBuilder(statusCmd);
+                    statusPb.directory(dir.toFile());statusPb.redirectErrorStream(true);
+                    process=statusPb.start();
+                    boolean statusDone=false;
+                    try(BufferedReader reader=new BufferedReader(new InputStreamReader(process.getInputStream(),StandardCharsets.UTF_8));
+                        BufferedWriter writer=Files.newBufferedWriter(file,StandardCharsets.UTF_8,StandardOpenOption.APPEND)){
+                        writer.write("\n=== A7.2 ESTADO TRAS LOTE (API=0) ===\n");
+                        String line;
+                        while((line=reader.readLine())!=null){
+                            writer.write(line);writer.newLine();
+                            progress.accept(line);
+                            if(line.startsWith("CUOTAS "))publish("A72_RESTANTES "+line);
+                            if(line.contains("SIMULACION COMPLETADA | HTTP=0 | SQL=SOLO LECTURA"))statusDone=true;
+                        }
+                    }
+                    int statusExit=process.waitFor();
+                    progressUpdated=statusExit==0&&statusDone&&!progress.rows.isEmpty();
+                    if(!progressUpdated)progressIssue="No se pudo completar la consulta de pendientes tras el lote; ejecutar Simular A7.2.";
+                }catch(Exception ex){
+                    progressIssue="No se pudo actualizar el contador: "+ex.getMessage()+". Ejecutar Simular A7.2.";
+                }
+                return "A7.2_LOTE_EJECUTADO";
+            }
+            @Override protected void process(List<String> messages){for(String m:messages)note(m);}
+            @Override protected void done(){
+                String result;try{result=get();}catch(Exception ex){result="ERROR A7.2: "+ex.getMessage();}
+                note("== "+result+" ==");
+                if(progressUpdated&&league.equals(key()))showA72Progress(progress,league,
+                    apply?"despues del lote":"simulacion");
+                else if(!progressIssue.isEmpty())note("AVISO A7.2: "+progressIssue);
+                if(league.equals(key())){
+                    if("A7.2_SIMULACION_OK".equals(result))a72PreviewSignature=scope;
+                    else if("A7.2_LOTE_EJECUTADO".equals(result)){
+                        a72PreviewSignature="";
+                        String prefix="league."+encode(key());
+                        leagueHistory.setProperty(prefix+".a72.last-run",LocalDateTime.now().toString());saveState();
+                        note("A7.2: lote ejecutado. No se marca historial completo hasta verificar A7.3.");
+                    } else a72PreviewSignature="";
+                }
+                process=null;ownBusy=false;setManagerBusy.accept(false);refresh();
+            }
+        }.execute();
+    }
+
     private static final class A63Outcome{
         String[] plan,applied;String csv,error;boolean finished,preview,problem;int code=-1;
     }
@@ -1761,6 +2202,18 @@ public final class NewLeaguePanel extends JPanel {
     private static final class A61Outcome{
         String[] summary;String csv,error;boolean finished,problem;int code=-1;
         List<String[]> status=new ArrayList<String[]>();
+    }
+
+    public static void selfTestA72(){
+        A72Progress p=new A72Progress();
+        p.accept("CUOTAS 2026/2027 MLS Play-offs | elegibles=30 DONE=18 faltan=12");
+        p.accept("CUOTAS 2025/2026 MLS Play-offs | elegibles=44 DONE=44 faltan=0");
+        p.accept("FIN HISTORICAL | intentos=10");
+        if(p.rows.size()!=2||p.eligible!=74||p.complete!=62||p.pending!=12)
+            throw new AssertionError("A72: recuentos por ventana no validos");
+        if(!"2026/2027".equals(p.rows.get(0)[0]))
+            throw new AssertionError("A72: etiqueta de ventana inesperada");
+        System.out.println("OK A7.2 contador por competicion TC y ventana UTC, sin peticiones API");
     }
 
     public static void selfTest(){

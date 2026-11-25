@@ -1,0 +1,21 @@
+TotalCorner Manager v1.9.8 – recuperación de B1.1 y soporte LS 1:N TC
+
+- B1.1 usa la misma consulta SQL que funcionaba en v1.8.9 cuando se seleccionan
+  exclusivamente las ocho competiciones históricas originales.
+- Si se activan competiciones adicionales de TC desde Bloque 1 (p. ej. MLS / MLS Play-offs),
+  B1.1 utiliza una consulta separada con correspondencia LS 1:N TC.
+- En la consulta 1:N, los partidos no enlazados se cuentan una vez por liga LS;
+  las cuotas pendientes se atribuyen a la competición TC a la que pertenece el partido TC.
+- La comparación de IDs en el CASE del mapeo 1:N es numérica, evitando conflictos
+  de collation de MySQL.
+- Si B1.1 devuelve un número de filas distinto de la selección, informa de un error;
+  nunca interpreta cero filas como ausencia de pendientes.
+- Ningún cambio en tablas ni escrituras MySQL.
+
+INSTALACIÓN: si volviste a v1.8.9, utiliza el ZIP COMPLETO de v1.9.8
+para recuperar todas las mejoras posteriores, incluidos A7 y la relación LS 1:N TC.
+Descomprime sobre el workspace y recompila el proyecto totalcorner-manager (Project > Clean).
+No necesitas cambiar totalcorner-downloader ni ejecutar procesos de descarga.
+
+VALIDACIÓN: Java 8 compilado con --release 8 en OpenJDK; B11 --self-test OK;
+no se ha ejecutado sobre la base MySQL local de Footiqo.

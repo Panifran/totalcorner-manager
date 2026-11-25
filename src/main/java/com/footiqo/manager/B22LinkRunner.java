@@ -28,7 +28,6 @@ import java.util.Set;
  */
 public final class B22LinkRunner {
     private static final DateTimeFormatter FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.ROOT);
-    private static final String[] LEAGUES = {"1", "14", "12", "16", "25", "137", "138", "2"};
     private B22LinkRunner() {}
 
     private static class Candidate {
@@ -216,10 +215,7 @@ public final class B22LinkRunner {
                     " AND lm.ftHomeTeamGoals IS NOT NULL AND lm.ftAwayTeamGoals IS NOT NULL"+
                     " AND tm.home_goals IS NOT NULL AND tm.away_goals IS NOT NULL"+
                     " AND lm.ftHomeTeamGoals=tm.home_goals AND lm.ftAwayTeamGoals=tm.away_goals")+
-                " AND tl.tc_league_id COLLATE utf8mb4_unicode_ci="+
-                " (CASE lls.league_id WHEN 2 THEN '1' WHEN 1 THEN '14' WHEN 3 THEN '12'"+
-                " WHEN 4 THEN '16' WHEN 5 THEN '25' WHEN 18 THEN '137' WHEN 28 THEN '138'"+
-                " WHEN 6 THEN '2' ELSE 'UNKNOWN' END) COLLATE utf8mb4_unicode_ci"+
+                " AND " + LeagueMappingRegistry.sqlMembership("lls.league_id", "tl.tc_league_id") +
                 " AND EXISTS(SELECT 1 FROM tc_team_link ht WHERE ht.tc_team_pk=tm.home_team_id"+
                 " AND ht.ls_team_id=lm.lsHomeTeam_id AND ht.review_status='VERIFIED')"+
                 " AND EXISTS(SELECT 1 FROM tc_team_link at WHERE at.tc_team_pk=tm.away_team_id"+
