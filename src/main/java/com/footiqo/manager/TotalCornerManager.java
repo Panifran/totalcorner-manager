@@ -449,7 +449,8 @@ public final class TotalCornerManager extends JFrame {
         b5Panel = new B5Panel(() -> busy, v -> setBusy(v), () -> project.getText());
         tabs.addTab("8. B5 ZIP", b5Panel);
         b6Panel = new B6Panel(() -> b5Panel.publicationSettings(), () -> busy, v -> setBusy(v));
-        tabs.addTab("9. B6 Coverage", b6Panel);
+        tabs.addTab("9. Coverage comercial", b6Panel);
+        tabs.addTab("10. B6 Coverage no comercial", new B6NonCommercialPanel(() -> b5Panel.publicationSettings(), () -> busy, v -> setBusy(v)));
         b7Panel = new B7PublishPanel(() -> b5Panel.publicationSettings(), () -> busy, v -> setBusy(v));
         tabs.addTab("10. B7 Publicar", b7Panel);
         newLeaguePanel = new NewLeaguePanel(() -> project.getText(), () -> java8.getText(),
@@ -1455,7 +1456,7 @@ public final class TotalCornerManager extends JFrame {
     }
     private static final class B4ControlResponse {
         final List<String[]> rows=new ArrayList<String[]>();int count=-1;
-        long pending=-1,up=0,total=0,ready=0,waiting=0,blocked=0;String error;
+        long pending=-1,up=0,total=0,ready=0,waiting=0,blocked=0;int scopeCreated=-1;String error;
     }
     private void runB4Control() {
         if(busy)return;
@@ -1483,11 +1484,13 @@ public final class TotalCornerManager extends JFrame {
                                     r.up=Long.parseLong(parts[3]);r.total=Long.parseLong(parts[4]);
                                     r.ready=Long.parseLong(parts[5]);r.waiting=Long.parseLong(parts[6]);
                                     r.blocked=Long.parseLong(parts[7]);}else r.error="Formato B4_DONE incorrecto";}
+                            else if(line.startsWith("B4_SCOPE_SYNC\t"))r.scopeCreated=Integer.parseInt(line.substring("B4_SCOPE_SYNC\t".length()).trim());
                             else if(line.startsWith("B4_ERROR\t"))r.error=line.substring(9);
                         }
                     }
                     int code=proc.waitFor();if(cancelledByUser)r.error="Consulta B4 interrumpida";
                     else if(code!=0&&r.error==null)r.error="Error ejecutando control B4: codigo "+code;
+                    if(r.error==null&&r.scopeCreated<0)r.error="Falta confirmacion de sincronizacion de temporadas";
                     if(r.error==null&&(r.count!=selected.size()||r.rows.size()!=selected.size()))r.error="Control B4 incompleto: "+r.rows.size()+"/"+selected.size();
                     if(r.error==null&&r.total!=r.up+r.pending)r.error="Control B4 incoherente: total != al dia + pendiente. Revisar SQL.";
                     if(r.error==null&&r.pending!=r.ready+r.waiting+r.blocked)
@@ -1506,7 +1509,8 @@ public final class TotalCornerManager extends JFrame {
                         " esperan JSON B3 y "+r.blocked+" estan bloqueados. No ejecutar Builder; diagnosticar pendientes + CSV.");
                     else b4Guidance.setText("B4 pendientes="+r.pending+", procesables="+r.ready+
                         ", sin fuentes B3="+r.waiting+", bloqueados="+r.blocked+". Simular solo los procesables.");
-                    status.setText("B4: "+r.ready+" procesables / "+r.pending+" pendientes.");
+                    status.setText("B4: "+r.ready+" procesables / "+r.pending+" pendientes; temporadas nuevas: "+r.scopeCreated);
+                    b4Guidance.setText("Temporadas nuevas incorporadas: "+r.scopeCreated+". "+b4Guidance.getText());
                     boolean b4NowComplete = r.pending==0;
                     boolean b4Executed = progress.detail("B4").startsWith("Ejecucion real B4") ||
                             WorkflowProgress.DONE.equals(progress.state("B4"));

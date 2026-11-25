@@ -37,6 +37,10 @@ public final class B4CoverageControlRunner {
                     env("TOTALCORNER_DB_URL","jdbc:mysql://localhost:3307/freefootstats?serverTimezone=UTC&useUnicode=true&characterEncoding=UTF-8&connectTimeout=10000&socketTimeout=30000"),
                     env("TOTALCORNER_DB_USER","root"),password)) {
                 if(!"freefootstats".equalsIgnoreCase(db.getCatalog()))throw new IllegalStateException("Base de datos inesperada");
+                // Sincroniza SOLO las temporadas de las ligas LS asociadas a las TC seleccionadas.
+                // Inserciones faltantes; no modifica ni reactiva filas existentes.
+                int created=CovScopeSynchronizer.synchronize(db,ids);
+                System.out.println("B4_SCOPE_SYNC\t"+created);
                 db.setReadOnly(true);
                 try(PreparedStatement st=db.prepareStatement(sql(ids.size()))) {
                     st.setQueryTimeout(180);
