@@ -20,6 +20,7 @@ public final class NewLeaguePanel extends JPanel {
     private static final String BACKFILL = "com.footiqo.totalcorner.LeagueScheduleBackfill";
     private static final String DISCOVERY = "com.footiqo.totalcorner.HistoricalDownloadRunner";
     private static final String AUDIT = "com.footiqo.manager.A4AuditRunner";
+    private static final String A8_AUDIT = "com.footiqo.manager.A8CoverageAuditRunner";
     private static final String TEAMS_A51 = "com.footiqo.manager.A51ExistingTeamsRunner";
     private static final String TEAMS_A52 = "com.footiqo.manager.A52TeamCandidatesRunner";
     private static final String TEAMS_A53 = "com.footiqo.manager.A53TeamLinksRunner";
@@ -179,6 +180,41 @@ public final class NewLeaguePanel extends JPanel {
     private final JLabel a73Status=new JLabel("Solo TC sin fecha, finalizados o enlazados VERIFIED con LS finalizado.");
     private String a73PreviewSignature="";
     private String a73Signature(){return key()+"|"+a73Limit.getValue();}
+    private final javax.swing.table.DefaultTableModel a73ProgressModel=new javax.swing.table.DefaultTableModel(
+        new Object[]{"TC PK","TC ID","Local TC","Visitante TC","Estado TC","Bookmakers","Bet365","Descarga"},0){
+        private static final long serialVersionUID=1L;
+        @Override public boolean isCellEditable(int r,int c){return false;}
+    };
+    private final JTable a73ProgressTable=new JTable(a73ProgressModel);
+    private final JLabel a73ProgressTotal=new JLabel("TOTAL: pulsa Consultar estado (0 API).");
+    private final JButton consultA73=new JButton("Consultar estado A7.3 (0 API)");
+    private String a73ReportKey="";
+    private static final class A73Report {
+        final List<String[]> rows=new ArrayList<String[]>();
+        String totals="";
+        boolean finished;
+        void accept(String line){
+            if(line.startsWith("A73_ROW|")){
+                String[] v=line.split("\\|",-1);
+                if(v.length==9)rows.add(java.util.Arrays.copyOfRange(v,1,9));
+            }else if(line.startsWith("A73_COUNTS|"))totals=line;
+            else if(line.startsWith("A73_REPORT_OK|"))finished=true;
+        }
+    }
+    private void showA73Report(A73Report report,String selected,String origin){
+        if(!selected.equals(key()))return;
+        a73ReportKey=selected;
+        a73ProgressModel.setRowCount(0);
+        for(String[] r:report.rows)a73ProgressModel.addRow(r);
+        if(report.totals.isEmpty()){
+            a73ProgressTotal.setText("No se obtuvo recuento A7.3. Revisa el log.");return;
+        }
+        String[] t=report.totals.split("\\|",-1);
+        if(t.length!=7){a73ProgressTotal.setText("Formato de contador A7.3 incorrecto.");return;}
+        a73ProgressTotal.setText("TOTAL: "+t[1]+" | Completos: "+t[2]+" | Pendientes: "+t[3]
+            +" | Bloqueados: "+t[4]+" | Sin confirmar: "+t[5]+" | Excluidos: "+t[6]+" | "+origin+" (0 API)");
+    }
+
 
     private final javax.swing.table.DefaultTableModel a72ProgressModel=new javax.swing.table.DefaultTableModel(
         new Object[]{"Liga TC", "Temporada (jul-jun)", "Elegibles", "Ejecutados (2 DONE)", "Pendientes"}, 0){
@@ -220,6 +256,66 @@ public final class NewLeaguePanel extends JPanel {
         }
     }
 
+    private final JButton consultA8=new JButton("Consultar auditoria A8 (MySQL, 0 API)");
+    private final JLabel a8Totals=new JLabel("A8: pendiente. Denominador: ls_match de la liga LS seleccionada.");
+    private final javax.swing.table.DefaultTableModel a8SeasonsModel=new javax.swing.table.DefaultTableModel(
+        new Object[]{"Temporada", "LS total", "Enlazados", "Sin enlace", "Duplicados", "Con cuotas", "Sin cuotas", "2 DONE", "Parcial"},0){
+        private static final long serialVersionUID=1L;
+        @Override public boolean isCellEditable(int r,int c){return false;}
+    };
+    private final javax.swing.table.DefaultTableModel a8MatchesModel=new javax.swing.table.DefaultTableModel(
+        new Object[]{"LS ID","Temporada","Fecha LS","Partido Footiqo","TC PK","Enlaces","Estado","Observaciones","Bookmakers","Mercados","BM job","B365 job"},0){
+        private static final long serialVersionUID=1L;
+        @Override public boolean isCellEditable(int r,int c){return false;}
+    };
+    private final javax.swing.table.DefaultTableModel a8BooksModel=new javax.swing.table.DefaultTableModel(
+        new Object[]{"Bookmaker","Partidos LS","Observaciones"},0){
+        private static final long serialVersionUID=1L;@Override public boolean isCellEditable(int r,int c){return false;}
+    };
+    private final javax.swing.table.DefaultTableModel a8MarketsModel=new javax.swing.table.DefaultTableModel(
+        new Object[]{"Mercado","Periodo","Partidos LS","Observaciones"},0){
+        private static final long serialVersionUID=1L;@Override public boolean isCellEditable(int r,int c){return false;}
+    };
+    private final JTable a8SeasonsTable=new JTable(a8SeasonsModel),a8MatchesTable=new JTable(a8MatchesModel),
+        a8BooksTable=new JTable(a8BooksModel),a8MarketsTable=new JTable(a8MarketsModel);
+    private String a8ReportKey="";
+    private static final class A8Report{
+        final List<String[]> matches=new ArrayList<String[]>(),seasons=new ArrayList<String[]>(),
+            books=new ArrayList<String[]>(),markets=new ArrayList<String[]>();
+        String[] totals;boolean finished;
+        void accept(String line){
+            String[] fields=line.split("\\|",-1);
+            if(line.startsWith("A8_MATCH|")&&fields.length==13)matches.add(Arrays.copyOfRange(fields,1,13));
+            else if(line.startsWith("A8_SEASON|")&&fields.length==10)seasons.add(Arrays.copyOfRange(fields,1,10));
+            else if(line.startsWith("A8_BOOK|")&&fields.length==4)books.add(Arrays.copyOfRange(fields,1,4));
+            else if(line.startsWith("A8_MARKET|")&&fields.length==5)markets.add(Arrays.copyOfRange(fields,1,5));
+            else if(line.startsWith("A8_TOTAL|")&&fields.length==12)totals=fields;
+            else if(line.startsWith("A8_REPORT_OK|"))finished=true;
+        }
+    }
+    private void clearA8OnChange(){
+        if(!a8ReportKey.isEmpty()&&!a8ReportKey.equals(key())){
+            a8ReportKey="";a8MatchesModel.setRowCount(0);a8SeasonsModel.setRowCount(0);
+            a8BooksModel.setRowCount(0);a8MarketsModel.setRowCount(0);
+            a8Totals.setText("A8: liga modificada; consultar auditoria (0 API).");
+        }
+    }
+    public boolean a8Consulted(){return !a8ReportKey.isEmpty()&&a8ReportKey.equals(key());}
+    private void showA8(A8Report report,String league){
+        if(!league.equals(key()))return;
+        a8ReportKey=league;
+        a8MatchesModel.setRowCount(0);a8SeasonsModel.setRowCount(0);a8BooksModel.setRowCount(0);a8MarketsModel.setRowCount(0);
+        for(String[] row:report.matches)a8MatchesModel.addRow(row);
+        for(String[] row:report.seasons)a8SeasonsModel.addRow(row);
+        for(String[] row:report.books)a8BooksModel.addRow(row);
+        for(String[] row:report.markets)a8MarketsModel.addRow(row);
+        String[] t=report.totals;
+        if(t!=null)a8Totals.setText("LS total: "+t[1]+" | Cobertura cuotas: "+
+            (Long.parseLong(t[1])==0?"N/A":String.format(java.util.Locale.ROOT,"%.1f%%",100.0*Long.parseLong(t[5])/Long.parseLong(t[1])))+
+            " | Enlazados: "+t[2]+" | Sin enlace: "+t[3]+
+            " | Multiples: "+t[4]+" | Con cuotas: "+t[5]+" | Sin cuotas: "+t[6]+
+            " | 2 DONE validos: "+t[7]+" | Parciales: "+t[8]+" | No consultados: "+t[9]+" | Respuesta sin cuotas: "+t[10]);
+    }
     private final JTabbedPane stages = new JTabbedPane(JTabbedPane.TOP, JTabbedPane.SCROLL_TAB_LAYOUT);
     private final Path saved = Paths.get(System.getProperty("user.home"), ".totalcorner-manager-new-league.properties");
     private String verifiedKey = "", pageDoneKey = "", verifiedAt = "", pageDoneAt = "";
@@ -445,15 +541,42 @@ public final class NewLeaguePanel extends JPanel {
         a73Options.add(new JLabel("Partidos maximos por lote (1-10):"));a73Options.add(a73Limit);
         a73Options.add(previewA73);a73Options.add(executeA73);
         a73Head.add(a73Options);a73Head.add(a73Status);
+        JPanel a73Actions=new JPanel(new FlowLayout(FlowLayout.LEFT,6,3));
+        a73Actions.add(consultA73);a73Head.add(a73Actions);
         a73.add(a73Head,BorderLayout.NORTH);
-        a73.add(new JLabel("Sin fecha: se conservan cuotas y timestamps; fase PREMATCH/POST_KICKOFF=UNKNOWN. No modifica ls_match."),BorderLayout.CENTER);
+        a73ProgressTable.setAutoCreateRowSorter(true);
+        a73ProgressTable.setRowHeight(23);
+        a73ProgressTable.setFillsViewportHeight(true);
+        JPanel a73Body=new JPanel(new BorderLayout(4,4));
+        a73Body.add(new JScrollPane(a73ProgressTable),BorderLayout.CENTER);
+        JPanel a73Footer=new JPanel(new BorderLayout(4,4));
+        a73Footer.add(a73ProgressTotal,BorderLayout.NORTH);
+        a73Footer.add(new JLabel("DONE = job completado con JSON valido. Sin fecha no se asigna fase prematch."),BorderLayout.SOUTH);
+        a73Body.add(a73Footer,BorderLayout.SOUTH);
+        a73.add(a73Body,BorderLayout.CENTER);
         stages.addTab("A7.3. Cuotas TC sin fecha",a73);
+
+        JPanel a8=new JPanel(new BorderLayout(5,5));
+        JPanel a8Head=new JPanel();a8Head.setLayout(new BoxLayout(a8Head,BoxLayout.Y_AXIS));
+        a8Head.add(new JLabel("A8 · Auditoria SOLO de la liga LS seleccionada. Todas sus temporadas. Sin API ni escrituras."));
+        JPanel a8Actions=new JPanel(new FlowLayout(FlowLayout.LEFT,6,4));a8Actions.add(consultA8);a8Head.add(a8Actions);
+        a8Head.add(a8Totals);a8.add(a8Head,BorderLayout.NORTH);
+        JTabbedPane a8Tabs=new JTabbedPane();
+        a8SeasonsTable.setAutoCreateRowSorter(true);a8MatchesTable.setAutoCreateRowSorter(true);
+        a8BooksTable.setAutoCreateRowSorter(true);a8MarketsTable.setAutoCreateRowSorter(true);
+        a8Tabs.addTab("Temporadas",new JScrollPane(a8SeasonsTable));
+        a8Tabs.addTab("Partidos LS",new JScrollPane(a8MatchesTable));
+        a8Tabs.addTab("Bookmakers",new JScrollPane(a8BooksTable));
+        a8Tabs.addTab("Mercados",new JScrollPane(a8MarketsTable));
+        a8.add(a8Tabs,BorderLayout.CENTER);
+        a8.add(new JLabel("COMPLETO = 2 jobs DONE con JSON y HTTP 200; CON CUOTAS = observaciones importadas. No son equivalentes."),BorderLayout.SOUTH);
+        // A8 se muestra ahora como pestana global despues del Bloque 02.
 
 
         JPanel center = new JPanel(new BorderLayout(4, 4));
         stages.setPreferredSize(new Dimension(900, 290));
         // La revision manual necesita visualizar muchas columnas y filas; ampliar solo A6.3/A6.4.
-        stages.addChangeListener(e->{int height=stages.getSelectedIndex()==9?510:290;
+        stages.addChangeListener(e->{int height=stages.getSelectedIndex()==9?510:((stages.getSelectedComponent()==a73||stages.getSelectedComponent()==a8)?450:290);
             if(stages.getPreferredSize().height!=height){stages.setPreferredSize(new Dimension(900,height));stages.revalidate();}});
         center.add(stages, BorderLayout.NORTH);
         log.setEditable(false); log.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
@@ -473,6 +596,8 @@ public final class NewLeaguePanel extends JPanel {
         executeA71.addActionListener(e -> runA71(true));
         previewA72.addActionListener(e -> runA72(false));
         executeA72.addActionListener(e -> runA72(true));
+        consultA73.addActionListener(e -> runA73Report());
+        consultA8.addActionListener(e -> runA8());
         previewA73.addActionListener(e -> runA73(false));
         executeA73.addActionListener(e -> runA73(true));
         a73Limit.addChangeListener(e -> {a73PreviewSignature="";refresh();});
@@ -808,7 +933,17 @@ public final class NewLeaguePanel extends JPanel {
             else savedLeagues.setSelectedIndex(0);
         }finally{rebuildingLeagues=false;}
     }
+    private void clearA73OnChange(){
+        if(!a73ReportKey.isEmpty()&&!a73ReportKey.equals(key())){
+            a73ReportKey="";
+            a73ProgressModel.setRowCount(0);
+            a73ProgressTotal.setText("TOTAL: consulta estado A7.3 para la liga seleccionada (0 API).");
+        }
+    }
+
     private void refresh(){
+        clearA73OnChange();
+        clearA8OnChange();
         if(!a72ProgressScope.isEmpty()&&!a72ProgressScope.equals(a72WindowScope())){
             a72ProgressKey="";
             a72ProgressScope="";
@@ -978,6 +1113,8 @@ public final class NewLeaguePanel extends JPanel {
         ManagerUiSupport.gate(executeA73,previewA73.isEnabled()&&a73Signature().equals(a73PreviewSignature),
             "Primero simula A7.3 con el mismo limite de partidos.");
         a73Limit.setEnabled(ready);
+        consultA73.setEnabled(ready && a7Ready);
+        ManagerUiSupport.gate(consultA8,ready,"Hay otro proceso del gestor en curso.");
         a71MatchPk.setEnabled(ready);
         for(JSpinner sp:new JSpinner[]{a72Newest,a72Oldest,a72MaxRequests,a72Hours})sp.setEnabled(ready);
         a71Status.setText(!a71When().isEmpty()?"A7.1 prueba con 2 endpoints confirmada: "+a71When():
@@ -2218,6 +2355,56 @@ public final class NewLeaguePanel extends JPanel {
         }.execute();
     }
 
+    /** A7.3: consulta todos los partidos sin fecha de la liga, sin limite de lote. */
+    private void runA73Report(){
+        if(ownBusy||managerBusy.get())return;
+        final String league=key();
+        final Path dir;
+        final List<String> cmd=new ArrayList<String>();
+        try{
+            dir=Paths.get(projectPath.get().trim()).toAbsolutePath().normalize();
+            Path java=Paths.get(java8Path.get().trim()).toAbsolutePath().normalize();
+            TotalCornerManager.verifyJava8(java);
+            if(!Files.isRegularFile(dir.resolve("target/classes/com/footiqo/totalcorner/LeagueOddsBatchDownloader.class")))
+                throw new IOException("Compila primero totalcorner-downloader con el informe A7.3.");
+            if(System.getenv("TOTALCORNER_DB_PASSWORD")==null)throw new IOException("Falta TOTALCORNER_DB_PASSWORD.");
+            Collections.addAll(cmd,java.toString(),"-Dfile.encoding=UTF-8","-cp",TotalCornerManager.buildClasspath(dir),
+                ODDS_A71,"--league="+tcId.getText().trim(),"--without-date-report");
+        }catch(Exception ex){JOptionPane.showMessageDialog(this,ex.getMessage(),"Estado A7.3",JOptionPane.ERROR_MESSAGE);return;}
+        ownBusy=true;cancelled=false;setManagerBusy.accept(true);refresh();
+        note("=== A7.3 CONSULTA DE ESTADO | MYSQL SELECT | API=0 ===");
+        new SwingWorker<A73Report,String>(){
+            String error="";
+            @Override protected A73Report doInBackground(){
+                A73Report report=new A73Report();
+                try{
+                    ProcessBuilder pb=new ProcessBuilder(cmd);pb.directory(dir.toFile());pb.redirectErrorStream(true);process=pb.start();
+                    try(BufferedReader reader=new BufferedReader(new InputStreamReader(process.getInputStream(),StandardCharsets.UTF_8))){
+                        String line;
+                        while((line=reader.readLine())!=null){
+                            report.accept(line);
+                            if(line.startsWith("ERROR")||line.contains("Exception"))error=line;
+                            // No inundar el log visual con cientos de filas; se muestran en tabla.
+                            if(!line.startsWith("A73_ROW|"))publish(line);
+                        }
+                    }
+                    int exit=process.waitFor();
+                    if(exit!=0||!report.finished)error="Informe A7.3 incompleto; codigo="+exit+". "+error;
+                }catch(Exception ex){error="No se pudo consultar A7.3: "+ex.getMessage();}
+                return report;
+            }
+            @Override protected void process(List<String> messages){for(String line:messages)note(line);}
+            @Override protected void done(){
+                try{
+                    A73Report report=get();
+                    if(!cancelled&&error.isEmpty())showA73Report(report,league,"consulta");
+                    else note("ERROR A7.3 estado: "+(cancelled?"cancelado":error));
+                }catch(Exception ex){note("ERROR A7.3 estado: "+ex.getMessage());}
+                process=null;ownBusy=false;setManagerBusy.accept(false);refresh();
+            }
+        }.execute();
+    }
+
     /** A7.3: reutiliza el motor de A7.1/A7.2, pero selecciona solo partidos TC sin fecha. */
     private void runA73(final boolean apply){
         if(ownBusy||managerBusy.get())return;
@@ -2282,6 +2469,55 @@ public final class NewLeaguePanel extends JPanel {
                         saveState();
                     }else a73PreviewSignature="";
                 }
+                process=null;ownBusy=false;setManagerBusy.accept(false);refresh();
+                if("A7.3_LOTE_PROCESADO".equals(result)&&league.equals(key()))runA73Report();
+            }
+        }.execute();
+    }
+
+    /** A8: auditoria completa de la liga LS actual, sin ninguna llamada API. */
+    private void runA8(){
+        if(ownBusy||managerBusy.get())return;
+        final String league=key();final Path dir;final List<String> cmd=new ArrayList<String>();
+        try{
+            String ls=lsId.getText().trim(),tc=tcId.getText().trim();
+            if(!ls.matches("[0-9]{1,15}")||!tc.matches("[0-9]{1,15}"))throw new IOException("IDs LS/TC incorrectos.");
+            dir=Paths.get(projectPath.get().trim()).toAbsolutePath().normalize();
+            Path java=Paths.get(java8Path.get().trim()).toAbsolutePath().normalize();TotalCornerManager.verifyJava8(java);
+            if(!Files.isRegularFile(dir.resolve("pom.xml")))throw new IOException("Revisa el directorio del downloader.");
+            if(System.getenv("TOTALCORNER_DB_PASSWORD")==null)throw new IOException("Falta TOTALCORNER_DB_PASSWORD.");
+            Collections.addAll(cmd,java.toString(),"-Dfile.encoding=UTF-8","-cp",
+                TotalCornerManager.managerCodeLocation()+File.pathSeparator+TotalCornerManager.buildClasspath(dir),
+                A8_AUDIT,"--ls-league-id="+ls,"--tc-league-id="+tc);
+        }catch(Exception ex){JOptionPane.showMessageDialog(this,ex.getMessage(),"A8",JOptionPane.ERROR_MESSAGE);return;}
+        a8ReportKey="";a8Totals.setText("Consultando partidos Footiqo y cuotas de la liga seleccionada...");
+        ownBusy=true;cancelled=false;setManagerBusy.accept(true);refresh();
+        note("=== A8 | Liga "+league+" | MySQL SELECT | API=0 ===");
+        new SwingWorker<A8Report,String>(){
+            String error="";
+            @Override protected A8Report doInBackground(){
+                A8Report report=new A8Report();
+                Path file=dir.resolve("target/totalcorner-manager-logs/A-a8-"+TS.format(LocalDateTime.now())+".log");
+                try{
+                    Files.createDirectories(file.getParent());publish("Log A8: "+file);
+                    ProcessBuilder pb=new ProcessBuilder(cmd);pb.directory(dir.toFile());pb.redirectErrorStream(true);process=pb.start();
+                    try(BufferedReader reader=new BufferedReader(new InputStreamReader(process.getInputStream(),StandardCharsets.UTF_8));
+                        BufferedWriter writer=Files.newBufferedWriter(file,StandardCharsets.UTF_8)){
+                        String line;while((line=reader.readLine())!=null){
+                            writer.write(line);writer.newLine();report.accept(line);
+                            if(line.startsWith("A8_ERROR:"))error=line;
+                            if(!line.startsWith("A8_MATCH|")&&!line.startsWith("A8_BOOK|")&&!line.startsWith("A8_MARKET|"))publish(line);
+                        }
+                    }
+                    int exit=process.waitFor();if(exit!=0||!report.finished||report.totals==null)error="Auditoria incompleta (exit="+exit+"). "+error;
+                }catch(Exception ex){error="A8: "+ex.getMessage();}
+                return report;
+            }
+            @Override protected void process(List<String> lines){for(String line:lines)note(line);}
+            @Override protected void done(){
+                try{A8Report out=get();if(!cancelled&&error.isEmpty()&&league.equals(key()))showA8(out,league);
+                    else {a8Totals.setText("A8 no completada. Ver log.");note("ERROR A8: "+(cancelled?"cancelado":error));}}
+                catch(Exception ex){a8Totals.setText("Error A8: "+ex.getMessage());note("ERROR A8: "+ex.getMessage());}
                 process=null;ownBusy=false;setManagerBusy.accept(false);refresh();
             }
         }.execute();

@@ -469,6 +469,7 @@ public final class TotalCornerManager extends JFrame {
         tabs.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
         sections.addTab("01 · Incorporar liga nueva",newLeaguePanel);
         sections.addTab("02 · Actualizar ligas",tabs);
+        sections.addTab("03 · Auditoria LS/TC",new CoverageAuditPanel(() -> project.getText(), () -> java8.getText(), () -> busy, v -> setBusy(v)));
         sections.addTab("Panel general · Estado",dashboardPanel);
         sections.addChangeListener(e -> {
             block2Inputs.setVisible(sections.getSelectedComponent()==tabs);
