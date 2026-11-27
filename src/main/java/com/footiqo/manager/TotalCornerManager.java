@@ -48,6 +48,8 @@ public final class TotalCornerManager extends JFrame {
     private final DefaultListModel<League> leagueModel = new DefaultListModel<League>();
     private final JList<League> leagues = new JList<League>(leagueModel);
     private final JTextArea output = new JTextArea(15, 85);
+    private final JTextArea seasonDetails = new JTextArea(7, 85);
+    private final JLabel seasonHeadline = new JLabel("Temporadas TC / actual Footiqo: pendientes de comprobar en B1.2.");
     private final DefaultTableModel controlModel = new DefaultTableModel(new Object[] {
             "TC", "Liga", "Ult. TC (UTC)", "Ult. Footiqo (Madrid)", "Revision API (UTC)",
             "Sin enlace (60d)", "Sin cuotas (60d)", "Total", "Estado local"
@@ -196,6 +198,10 @@ public final class TotalCornerManager extends JFrame {
             try { WorkflowProgress.selfTest(); } catch(Exception ex) { throw new IllegalStateException(ex); }
             return;
         }
+        if (args.length > 0 && "--self-test-season-display".equals(args[0])) {
+            testSeasonDisplay();
+            return;
+        }
         if (args.length > 0 && "--self-test-flow".equals(args[0])) {
             testGuidedFlow();
             return;
@@ -303,7 +309,11 @@ public final class TotalCornerManager extends JFrame {
         guideFoot.add(guidance);
         guideFoot.add(Box.createVerticalStrut(7));
         guideFoot.add(controlNote);
-        guideFoot.add(Box.createVerticalStrut(15));
+        guideFoot.add(Box.createVerticalStrut(6));
+        seasonHeadline.setAlignmentX(Component.LEFT_ALIGNMENT);
+        seasonHeadline.setFont(seasonHeadline.getFont().deriveFont(Font.BOLD));
+        guideFoot.add(seasonHeadline);
+        guideFoot.add(Box.createVerticalStrut(12));
         JLabel roadmapLabel = new JLabel("Recorrido: B1 Calendario -> B2 Enlaces -> B3 Descargar cuotas -> B4 Procesar cuotas -> B5 ZIP -> B6 Coverage -> WinSCP");
         roadmapLabel.setFont(roadmapLabel.getFont().deriveFont(Font.BOLD, 12f));
         roadmapLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -349,6 +359,13 @@ public final class TotalCornerManager extends JFrame {
         output.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         output.setLineWrap(false);
         refreshPanel.add(new JScrollPane(output), BorderLayout.CENTER);
+        seasonDetails.setEditable(false);
+        seasonDetails.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        seasonDetails.setText("Pendiente de comprobar: ejecuta B1.2 para contrastar TC con la temporada actual de Footiqo.");
+        JScrollPane seasonScroll = new JScrollPane(seasonDetails);
+        seasonScroll.setBorder(BorderFactory.createTitledBorder("Temporadas TC frente a temporada actual Footiqo"));
+        seasonScroll.setPreferredSize(new Dimension(400, 155));
+        refreshPanel.add(seasonScroll, BorderLayout.SOUTH);
         tabs.addTab("2. Ejecutar B1.2", refreshPanel);
 
         JPanel b21Panel = new JPanel(new BorderLayout(6, 6));
@@ -642,10 +659,14 @@ public final class TotalCornerManager extends JFrame {
             }
             saveSettings();
             output.setText(actual ? "INICIO REFRESCO REAL B1.2\n" : "SIMULACION B1.2 (sin API ni MySQL)\n");
+            if (actual) {
+                seasonDetails.setText("B1.2 en curso. La comprobacion de temporadas se ejecuta al terminar correctamente.\n");
+                seasonHeadline.setText("Temporadas TC / actual Footiqo: comprobacion pendiente...");
+            }
             status.setText(actual ? "Refresco en ejecucion..." : "Comprobando configuracion...");
             setBusy(true);
             cancelledByUser = false;
-            runProcess(args, dir, actual, selected.size(), currentCycleKey());
+            runProcess(args, dir, actual, selected.size(), currentCycleKey(), selected);
         } catch (Exception err) {
             JOptionPane.showMessageDialog(this, err.getMessage(), "No se puede ejecutar", JOptionPane.ERROR_MESSAGE);
         }
@@ -711,9 +732,148 @@ public final class TotalCornerManager extends JFrame {
         return joiner.toString();
     }
 
+    /** Agrupa TC por liga LS; se prueban hasta encontrar la primera season disponible. */
+    private static String seasonCandidatePairs(List<League> selected) {
+        Map<String,LeagueMappingRegistry.Association> all=LeagueMappingRegistry.load();
+        Set<String> lsIds=new LinkedHashSet<String>();
+        for (League league:selected) {
+            LeagueMappingRegistry.Association a=all.get(league.id);
+            if(a!=null && a.updates)lsIds.add(a.lsId);
+        }
+        StringJoiner result=new StringJoiner(",");
+        for(String ls:lsIds) {
+            List<LeagueMappingRegistry.Association> candidates=new ArrayList<LeagueMappingRegistry.Association>();
+            for(LeagueMappingRegistry.Association a:all.values())
+                if(a.lsId.equals(ls) && a.updates)candidates.add(a);
+            // Priorizar competiciones regulares: evita gastar peticiones en play-offs con season=null.
+            Collections.sort(candidates,(a,b)->{
+                String an=a.name.toLowerCase(Locale.ROOT), bn=b.name.toLowerCase(Locale.ROOT);
+                boolean ap=an.contains("playoff")||an.contains("play-off")||an.contains("play off");
+                boolean bp=bn.contains("playoff")||bn.contains("play-off")||bn.contains("play off");
+                if(ap!=bp)return ap?1:-1;
+                return Long.compare(Long.parseLong(a.tcId),Long.parseLong(b.tcId));
+            });
+            Set<String> tcIds=new LinkedHashSet<String>();
+            for(LeagueMappingRegistry.Association a:candidates)tcIds.add(a.tcId);
+            if(!tcIds.isEmpty())result.add(ls+":"+String.join(";",tcIds));
+        }
+        return result.toString();
+    }
+
+    private static final class SeasonComparison {
+        final String lsId, tcId, tcSeason, lsSeason, state, reason;
+        SeasonComparison(String lsId, String tcId, String tcSeason, String lsSeason, String state, String reason) {
+            this.lsId = lsId; this.tcId = tcId; this.tcSeason = tcSeason;
+            this.lsSeason = lsSeason; this.state = state; this.reason = reason;
+        }
+    }
+
+    private static SeasonComparison parseSeasonResult(String line) {
+        if (!line.startsWith("SEASON_RESULT|")) return null;
+        String[] fields = line.split("\\|", -1);
+        if (fields.length != 7) return null;
+        if (!fields[1].matches("[1-9][0-9]*")) return null;
+        if (!("OK".equals(fields[5]) || "ALERTA".equals(fields[5]) || "NO_COMPROBADO".equals(fields[5])))
+            return null;
+        return new SeasonComparison(fields[1], fields[2], fields[3], fields[4], fields[5], fields[6]);
+    }
+
+    private static String seasonReasonLabel(String reason) {
+        if ("TEMPORADA_DISTINTA_LS".equals(reason)) return "temporadas distintas";
+        if ("SIN_TEMPORADA_ACTUAL_LS".equals(reason)) return "sin temporada actual LS";
+        if ("MULTIPLES_TEMPORADAS_ACTUALES_LS".equals(reason)) return "multiples temporadas actuales LS";
+        if ("TEMPORADA_ACTUAL_LS_INVALIDA".equals(reason)) return "temporada LS invalida";
+        if ("SIN_SEASON_TC".equals(reason)) return "sin season en las ligas TC asociadas";
+        if ("ERROR_LECTURA_LS".equals(reason)) return "error al leer la temporada LS";
+        if ("ERROR_PROCESO".equals(reason)) return "detector no ejecutado completamente";
+        return reason;
+    }
+
+    private static void testSeasonDisplay() {
+        SeasonComparison ok = parseSeasonResult("SEASON_RESULT|2|1|2026/2027|2026/2027|OK|OK");
+        SeasonComparison different = parseSeasonResult("SEASON_RESULT|7|85|2027|2026|ALERTA|TEMPORADA_DISTINTA_LS");
+        SeasonComparison unknown = parseSeasonResult("SEASON_RESULT|7|-|-|2026|NO_COMPROBADO|SIN_SEASON_TC");
+        if (ok == null || !"OK".equals(ok.state) || !"2026/2027".equals(ok.lsSeason))
+            throw new AssertionError("Season OK display");
+        if (different == null || !"ALERTA".equals(different.state)) throw new AssertionError("Season ALERTA display");
+        if (unknown == null || !"NO_COMPROBADO".equals(unknown.state)) throw new AssertionError("Season UNKNOWN display");
+        if (parseSeasonResult("SEASON_OK|2|1|2026/2027") != null) throw new AssertionError("legacy event");
+        System.out.println("SEASON_DISPLAY_SELF_TEST_OK");
+    }
+
+    /** Una fila visible por liga LS, incluso si TC no devuelve season o el detector falla. */
+    private String runSeasonCheck(List<String> b12Command, Path dir, List<League> selected,
+                                  List<String> notices, List<String> details) {
+        String pairs=seasonCandidatePairs(selected);
+        details.add("=== COMPROBACION DE TEMPORADAS (TC frente a LS actual) ===");
+        if(pairs.isEmpty()) {
+            details.add("NO COMPROBADO: no hay asociaciones activas de las ligas seleccionadas con LS.");
+            return "Temporadas: ninguna asociacion LS disponible";
+        }
+        Map<String, SeasonComparison> results = new LinkedHashMap<String, SeasonComparison>();
+        int exit = -1;
+        try {
+            List<String> cmd=new ArrayList<String>();
+            cmd.add(b12Command.get(0));cmd.add("-cp");cmd.add(b12Command.get(2));
+            cmd.add("com.footiqo.totalcorner.SeasonChangeAlertRunner");cmd.add("--pairs="+pairs);
+            Process proc=new ProcessBuilder(cmd).directory(dir.toFile()).redirectErrorStream(true).start();
+            try(BufferedReader in=new BufferedReader(new InputStreamReader(proc.getInputStream(),StandardCharsets.UTF_8))) {
+                String line;
+                while((line=in.readLine())!=null){
+                    SeasonComparison cmp=parseSeasonResult(line);
+                    if(cmp!=null) results.put(cmp.lsId,cmp);
+                    // Los protocolos legacy SEASON_OK/ALERT se omiten para no duplicar avisos.
+                    if(line.startsWith("SEASON_WARNING|") || line.startsWith("SEASON_ERROR|"))
+                        details.add("  Diagnostico detector: " + line);
+                }
+            }
+            exit = proc.waitFor();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            details.add("  Detector interrumpido.");
+        } catch (Exception ex) {
+            details.add("  Detector no disponible: " + ex.getClass().getSimpleName());
+        }
+
+        Map<String, LeagueMappingRegistry.Association> associations=LeagueMappingRegistry.load();
+        int ok=0, alerts=0, unknown=0;
+        for (String pair : pairs.split(",")) {
+            String ls=pair.split(":",2)[0];
+            SeasonComparison cmp=results.get(ls);
+            if(cmp==null)
+                cmp=new SeasonComparison(ls,"-","-","-","NO_COMPROBADO","ERROR_PROCESO");
+            String name="Liga LS " + ls;
+            LeagueMappingRegistry.Association association=associations.get(cmp.tcId);
+            if(association==null) {
+                for (LeagueMappingRegistry.Association a:associations.values())
+                    if(ls.equals(a.lsId)) { association=a; break; }
+            }
+            if(association!=null) name=association.name + " (LS " + ls + ")";
+            String stateLabel;
+            if("OK".equals(cmp.state)) {ok++; stateLabel="OK";}
+            else if("ALERTA".equals(cmp.state)) {alerts++; stateLabel="ALERTA";}
+            else {unknown++; stateLabel="NO COMPROBADO";}
+            String suffix="OK".equals(cmp.state)?"":(" ("+seasonReasonLabel(cmp.reason)+")");
+            details.add(String.format(Locale.ROOT,
+                    "%-32s | TC: %-9s | LS actual: %-11s | %s%s",
+                    name,cmp.tcSeason,cmp.lsSeason,stateLabel,suffix));
+            if("ALERTA".equals(cmp.state))
+                notices.add(name + ": TC=" + cmp.tcSeason + " / actual LS=" + cmp.lsSeason
+                        + " (" + seasonReasonLabel(cmp.reason) + ")");
+        }
+        if(exit!=0) details.add("  AVISO: el detector no termino correctamente (codigo " + exit + ").");
+        String summary="Temporadas: " + (ok+alerts+unknown) + " ligas | "
+                + ok + " OK | " + alerts + " alertas | " + unknown + " no comprobadas";
+        details.add(summary);
+        return summary;
+    }
+
     private void runProcess(final List<String> cmd, final Path dir, final boolean actual,
-                            final int expected, final String executedCycleKey) {
+                            final int expected, final String executedCycleKey, final List<League> selectedLeagues) {
         SwingWorker<String, String> worker = new SwingWorker<String, String>() {
+            private final List<String> seasonNotices = new ArrayList<String>();
+            private final List<String> seasonReport = new ArrayList<String>();
+            private String seasonReportHeadline = "";
             @Override protected String doInBackground() {
                 boolean finished = false;
                 boolean sawError = false;
@@ -755,8 +915,10 @@ public final class TotalCornerManager extends JFrame {
                         return "REVISAR B1.2: conflictos_marcador=" + conflicts
                                 + ", horas DST sin UTC=" + uncertainHours
                                 + ". Resolver incidencias antes de continuar el ciclo.";
-                    if (actual && finished && confirmed == planned && planned == expected)
+                    if (actual && finished && confirmed == planned && planned == expected) {
+                        seasonReportHeadline = runSeasonCheck(cmd, dir, selectedLeagues, seasonNotices, seasonReport);
                         return "CONFIRMADO B1.2: " + confirmed + "/" + planned + " ligas verificadas. Revisar marcadores/conflictos antes de B2.";
+                    }
                     if (!actual && preview) return "SIMULACION CORRECTA: cero solicitudes API, cero escrituras MySQL.";
                     return "SIN CONFIRMACION: la clase termino, pero no genero el resumen esperado. Revisar consola.";
                 } catch (InterruptedException e) {
@@ -774,6 +936,21 @@ public final class TotalCornerManager extends JFrame {
                 String result;
                 try { result = get(); } catch (Exception e) { result = "ERROR: " + e.getMessage(); }
                 output.append("\n== " + result + " ==\n");
+                if (!seasonReport.isEmpty()) {
+                    String report = String.join("\n", seasonReport);
+                    seasonDetails.setText(report + "\n");
+                    seasonDetails.setCaretPosition(0);
+                    output.append("\n" + report + "\n");
+                    seasonHeadline.setText(seasonReportHeadline + " (detalle en B1.2)");
+                    output.setCaretPosition(output.getDocument().getLength());
+                } else if (actual) {
+                    seasonDetails.setText("NO COMPROBADO: B1.2 no termino con confirmacion completa.\n");
+                    seasonHeadline.setText("Temporadas: no comprobadas (B1.2 sin confirmar).");
+                }
+                if (!seasonNotices.isEmpty()) {
+                    JOptionPane.showMessageDialog(TotalCornerManager.this,
+                        String.join("\n", seasonNotices), "Temporada nueva detectada", JOptionPane.WARNING_MESSAGE);
+                }
                 status.setText(result);
                 setBusy(false);
                 if (actual && result.startsWith("CONFIRMADO B1.2")) {
